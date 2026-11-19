@@ -7,7 +7,7 @@ Entrega: Diseño y contrato, 19 de noviembre de 2026
 
 | Integrante | Código | Correo | Rol en la célula |
 | --- | --- | --- | --- |
-| Andrés Gerardo González Rosero | 202416541 | | Por definir |
+| Andrés Gerardo González Rosero | 202416541 | andresgerardogonzales@gmail.com | Por definir |
 | Freddy Alexander Melo Buitrago | 202125498 | freddy.melo@correounivalle.edu.co | Por definir |
 | Por completar | | | |
 | Por completar | | | |
