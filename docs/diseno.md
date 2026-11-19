@@ -9,9 +9,9 @@ Entrega: Diseño y contrato, 19 de noviembre de 2026
 | --- | --- | --- | --- |
 | Andrés Gerardo González Rosero | 202416541 | andresgerardogonzales@gmail.com | Por definir |
 | Freddy Alexander Melo Buitrago | 202125498 | freddy.melo@correounivalle.edu.co | Por definir |
-| Por completar | | | |
-| Por completar | | | |
-| Por completar | | | |
+| Sarahy Gisselle Caicedo Betancourth | 202610315 | sarahy.caicedo@correounivalle.edu.co | Por definir |
+| Juan David Guar | 202341909 | juan.guar@correounivalle.edu.co | Por definir |
+| Verónica Andreina Granados López | 202123263 | veronica.granados@correounivalle.edu.co | Por definir |
 
 El contrato OpenAPI se entrega aparte, en el archivo `openapi.yaml`.
 
