@@ -1,0 +1,393 @@
+openapi: 3.0.3
+info:
+  title: Voltrix Energy - Servicio de Alertas y Notificaciones
+  version: 0.1.0
+  description: |
+    Equipo 3 - Curso 750023C Infraestructuras Paralelas y Distribuidas (Univalle, 2026-2).
+
+    Evalúa lecturas de telemetría contra umbrales operativos y registra alertas
+    sin duplicados ni pérdidas. La evaluación de un lote se hace con N workers
+    concurrentes que comparten el contador de lecturas consecutivas por activo y
+    el registro de alertas activas; ese acceso se protege con locks y una cola
+    thread-safe (ver documento de diseño).
+
+    Consume: Telemetría de Plantas (Equipo 2) - GET /telemetria/{plantaId}
+    Consumido por: Mantenimiento Predictivo (Equipo 6) - GET /alertas/estado
+servers:
+  - url: http://{host}:{port}
+    description: Despliegue en EC2 (la URL real se registra en el directorio compartido de servicios)
+    variables:
+      host:
+        default: localhost
+      port:
+        default: "8003"
+tags:
+  - name: Alertas
+  - name: Operación
+
+paths:
+  /alertas:
+    post:
+      tags: [Alertas]
+      summary: Evalúa un lote de lecturas y registra las alertas resultantes
+      description: |
+        Acepta las lecturas de dos formas (exactamente una):
+        - `lecturas`: el lote viene en el cuerpo (útil para pruebas y benchmark).
+        - `plantaId`: el servicio trae las lecturas desde Telemetría de Plantas.
+
+        Una alerta solo se crea cuando la condición se repite en
+        `lecturasConsecutivas` lecturas seguidas del mismo activo. Si ya existe
+        una alerta ACTIVA para el mismo (activoId, metrica, severidad), se
+        actualiza (`ocurrencias`, `ultimaDeteccion`) en lugar de duplicarse.
+      operationId: evaluarLote
+      parameters:
+        - name: modo
+          in: query
+          required: false
+          description: Modo de ejecución, para el benchmark secuencial vs concurrente.
+          schema:
+            type: string
+            enum: [secuencial, concurrente]
+            default: concurrente
+        - name: workers
+          in: query
+          required: false
+          description: Número de workers en modo concurrente (por defecto, el del ConfigMap).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 16
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvaluacionRequest'
+            examples:
+              loteEnLinea:
+                summary: Lote enviado en el cuerpo
+                value:
+                  lecturas:
+                    - lecturaId: "L-000101"
+                      plantaId: "PL-07"
+                      activoId: "BAT-07-02"
+                      tipoActivo: BATERIA
+                      metrica: temperatura
+                      valor: 46.3
+                      unidad: "C"
+                      timestamp: "2026-11-19T13:05:00Z"
+                    - lecturaId: "L-000102"
+                      plantaId: "PL-07"
+                      activoId: "TUR-07-01"
+                      tipoActivo: TURBINA
+                      metrica: velocidadViento
+                      valor: 27.1
+                      unidad: "m/s"
+                      timestamp: "2026-11-19T13:05:00Z"
+              desdeTelemetria:
+                summary: Traer lecturas de una planta desde Telemetría
+                value:
+                  plantaId: "PL-07"
+                  desde: "2026-11-19T12:00:00Z"
+                  hasta: "2026-11-19T13:00:00Z"
+      responses:
+        '200':
+          description: Lote evaluado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluacionResultado'
+              example:
+                lecturasEvaluadas: 2
+                alertasNuevas: 1
+                alertasActualizadas: 0
+                duplicadasEvitadas: 1
+                modo: concurrente
+                workers: 4
+                tiempoMs: 12.8
+                alertas:
+                  - id: "ALR-2026-000045"
+                    plantaId: "PL-07"
+                    activoId: "BAT-07-02"
+                    tipoActivo: BATERIA
+                    metrica: temperatura
+                    valorObservado: 46.3
+                    umbralAplicado: 45
+                    severidad: CRITICA
+                    estado: ACTIVA
+                    ocurrencias: 1
+                    primeraDeteccion: "2026-11-19T13:05:00Z"
+                    ultimaDeteccion: "2026-11-19T13:05:00Z"
+        '400':
+          $ref: '#/components/responses/SolicitudInvalida'
+        '429':
+          $ref: '#/components/responses/DemasiadasSolicitudes'
+        '502':
+          description: Telemetría de Plantas no respondió o respondió con error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          $ref: '#/components/responses/NoDisponible'
+
+  /alertas/estado:
+    get:
+      tags: [Alertas]
+      summary: Estado vigente de las alertas
+      description: |
+        Resumen y lista de alertas. Lo usa Mantenimiento Predictivo para
+        generar órdenes. Por defecto devuelve solo las ACTIVAS.
+      operationId: consultarEstado
+      parameters:
+        - name: plantaId
+          in: query
+          schema: { type: string }
+          example: "PL-07"
+        - name: activoId
+          in: query
+          schema: { type: string }
+        - name: severidad
+          in: query
+          schema:
+            $ref: '#/components/schemas/Severidad'
+        - name: estado
+          in: query
+          schema:
+            type: string
+            enum: [ACTIVA, RESUELTA, TODAS]
+            default: ACTIVA
+        - name: limite
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        '200':
+          description: Estado de las alertas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadoAlertas'
+              example:
+                generadoEn: "2026-11-19T13:06:00Z"
+                totalActivas: 2
+                porSeveridad: { ADVERTENCIA: 1, CRITICA: 1 }
+                porPlanta: { "PL-07": 2 }
+                alertas:
+                  - id: "ALR-2026-000045"
+                    plantaId: "PL-07"
+                    activoId: "BAT-07-02"
+                    tipoActivo: BATERIA
+                    metrica: temperatura
+                    valorObservado: 46.3
+                    umbralAplicado: 45
+                    severidad: CRITICA
+                    estado: ACTIVA
+                    ocurrencias: 3
+                    primeraDeteccion: "2026-11-19T13:05:00Z"
+                    ultimaDeteccion: "2026-11-19T13:05:20Z"
+                  - id: "ALR-2026-000046"
+                    plantaId: "PL-07"
+                    activoId: "PAN-07-11"
+                    tipoActivo: PANEL
+                    metrica: caidaPotencia
+                    valorObservado: 27.5
+                    umbralAplicado: 20
+                    severidad: ADVERTENCIA
+                    estado: ACTIVA
+                    ocurrencias: 1
+                    primeraDeteccion: "2026-11-19T13:05:10Z"
+                    ultimaDeteccion: "2026-11-19T13:05:10Z"
+        '400':
+          $ref: '#/components/responses/SolicitudInvalida'
+        '429':
+          $ref: '#/components/responses/DemasiadasSolicitudes'
+        '503':
+          $ref: '#/components/responses/NoDisponible'
+
+  /health:
+    get:
+      tags: [Operación]
+      summary: Salud del servicio
+      operationId: health
+      responses:
+        '200':
+          description: Servicio y base de datos disponibles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+              example:
+                status: UP
+                servicio: alertas-notificaciones
+                version: 0.1.0
+                baseDatos: UP
+                telemetria: UP
+        '503':
+          description: La base de datos no está disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+              example:
+                status: DOWN
+                servicio: alertas-notificaciones
+                version: 0.1.0
+                baseDatos: DOWN
+                telemetria: UNKNOWN
+
+components:
+  schemas:
+    TipoActivo:
+      type: string
+      enum: [PANEL, TURBINA, BATERIA]
+    Severidad:
+      type: string
+      enum: [ADVERTENCIA, CRITICA]
+
+    Lectura:
+      type: object
+      description: Lectura de sensor tal como la entrega Telemetría de Plantas (por confirmar con el Equipo 2).
+      required: [lecturaId, plantaId, activoId, tipoActivo, metrica, valor, timestamp]
+      properties:
+        lecturaId: { type: string }
+        plantaId: { type: string }
+        activoId: { type: string }
+        tipoActivo: { $ref: '#/components/schemas/TipoActivo' }
+        metrica:
+          type: string
+          description: temperatura | caidaPotencia | velocidadViento
+        valor: { type: number }
+        unidad: { type: string }
+        timestamp: { type: string, format: date-time }
+
+    EvaluacionRequest:
+      type: object
+      description: Enviar `lecturas` o `plantaId`, no ambos.
+      properties:
+        lecturas:
+          type: array
+          maxItems: 5000
+          items: { $ref: '#/components/schemas/Lectura' }
+        plantaId:
+          type: string
+        desde:
+          type: string
+          format: date-time
+        hasta:
+          type: string
+          format: date-time
+
+    Alerta:
+      type: object
+      required: [id, plantaId, activoId, tipoActivo, metrica, severidad, estado, ocurrencias]
+      properties:
+        id: { type: string }
+        plantaId: { type: string }
+        activoId: { type: string }
+        tipoActivo: { $ref: '#/components/schemas/TipoActivo' }
+        metrica: { type: string }
+        valorObservado: { type: number }
+        umbralAplicado: { type: number }
+        severidad: { $ref: '#/components/schemas/Severidad' }
+        estado:
+          type: string
+          enum: [ACTIVA, RESUELTA]
+        ocurrencias:
+          type: integer
+          description: Veces que se ha detectado la condición mientras la alerta sigue activa.
+        primeraDeteccion: { type: string, format: date-time }
+        ultimaDeteccion: { type: string, format: date-time }
+
+    EvaluacionResultado:
+      type: object
+      required: [lecturasEvaluadas, alertasNuevas, alertasActualizadas, modo, tiempoMs]
+      properties:
+        lecturasEvaluadas: { type: integer }
+        alertasNuevas: { type: integer }
+        alertasActualizadas: { type: integer }
+        duplicadasEvitadas:
+          type: integer
+          description: Detecciones que habrían creado una alerta repetida y se fusionaron con la existente.
+        modo:
+          type: string
+          enum: [secuencial, concurrente]
+        workers: { type: integer }
+        tiempoMs:
+          type: number
+          description: Tiempo de procesamiento del lote medido en el servidor.
+        alertas:
+          type: array
+          items: { $ref: '#/components/schemas/Alerta' }
+
+    EstadoAlertas:
+      type: object
+      required: [generadoEn, totalActivas, alertas]
+      properties:
+        generadoEn: { type: string, format: date-time }
+        totalActivas: { type: integer }
+        porSeveridad:
+          type: object
+          additionalProperties: { type: integer }
+        porPlanta:
+          type: object
+          additionalProperties: { type: integer }
+        alertas:
+          type: array
+          items: { $ref: '#/components/schemas/Alerta' }
+
+    Health:
+      type: object
+      required: [status, servicio]
+      properties:
+        status:
+          type: string
+          enum: [UP, DOWN]
+        servicio: { type: string }
+        version: { type: string }
+        baseDatos:
+          type: string
+          enum: [UP, DOWN]
+        telemetria:
+          type: string
+          enum: [UP, DOWN, UNKNOWN]
+
+    Error:
+      type: object
+      required: [codigo, mensaje]
+      properties:
+        codigo: { type: string }
+        mensaje: { type: string }
+        detalle: { type: string }
+
+  responses:
+    SolicitudInvalida:
+      description: Cuerpo o parámetros inválidos
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            codigo: SOLICITUD_INVALIDA
+            mensaje: Envíe 'lecturas' o 'plantaId', no ambos.
+    DemasiadasSolicitudes:
+      description: Límite de tasa excedido
+      headers:
+        Retry-After:
+          schema: { type: integer }
+          description: Segundos antes de reintentar
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            codigo: LIMITE_EXCEDIDO
+            mensaje: Demasiadas solicitudes, reintente más tarde.
+    NoDisponible:
+      description: Servicio sobrecargado (cola de evaluación llena) o base de datos caída
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            codigo: SOBRECARGA
+            mensaje: La cola de evaluación está llena.
