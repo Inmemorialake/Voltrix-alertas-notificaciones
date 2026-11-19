@@ -5,13 +5,13 @@ Curso 750023C Infraestructuras Paralelas y Distribuidas, Univalle, 2026-2\
 Profesor: Manuel Alejandro Pastrana Pardo, PhD\
 Entrega: Diseño y contrato, 19 de noviembre de 2026
 
-| Integrante | Código | Rol en la célula |
-| --- | --- | --- |
-| Andrés Gerardo González Rosero | 202416541 | Por definir |
-| Por completar | | |
-| Por completar | | |
-| Por completar | | |
-| Por completar | | |
+| Integrante | Código | Correo | Rol en la célula |
+| --- | --- | --- | --- |
+| Andrés Gerardo González Rosero | 202416541 | | Por definir |
+| Freddy Alexander Melo Buitrago | 202125498 | freddy.melo@correounivalle.edu.co | Por definir |
+| Por completar | | | |
+| Por completar | | | |
+| Por completar | | | |
 
 El contrato OpenAPI se entrega aparte, en el archivo `openapi.yaml`.
 

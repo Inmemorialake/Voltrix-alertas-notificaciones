@@ -68,10 +68,10 @@ Pendiente para el Avance 1 (esqueleto con docker-compose y datos de ejemplo seg�
 
 ## Equipo 3
 
-| Integrante | GitHub |
-| --- | --- |
-| Andrés Gerardo González Rosero | [@Inmemorialake](https://github.com/Inmemorialake) |
-| Por completar | |
-| Por completar | |
-| Por completar | |
-| Por completar | |
+| Integrante | Código | Correo | GitHub |
+| --- | --- | --- | --- |
+| Andrés Gerardo González Rosero | 202416541 | | [@Inmemorialake](https://github.com/Inmemorialake) |
+| Freddy Alexander Melo Buitrago | 202125498 | freddy.melo@correounivalle.edu.co | |
+| Por completar | | | |
+| Por completar | | | |
+| Por completar | | | |
