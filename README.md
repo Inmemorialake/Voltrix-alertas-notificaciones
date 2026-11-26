@@ -49,12 +49,16 @@ Python 3.12 · FastAPI · Uvicorn · `concurrent.futures` / `threading` · Postg
 ├── openapi.yaml        # Contrato de la API
 ├── openapi.json        # Mismo contrato en JSON
 ├── docs/               # Diseño y evidencia
-├── app/                # Código del servicio (Avance 1)
+├── app/                # Código del servicio (FastAPI) y migraciones SQL
+├── tests/              # Pruebas que validan las respuestas contra openapi.yaml
 ├── bench/              # Benchmark secuencial vs paralelo (Avance 2)
+├── Dockerfile          # Imagen multi-stage, usuario no root
 ├── deploy/
-│   ├── compose/        # docker-compose para EC2
+│   ├── compose/        # docker-compose para EC2 (api + db)
 │   ├── k8s/            # Manifiestos para Floci EKS
-│   └── iac/            # Infraestructura como código
+│   └── iac/
+│       ├── ec2/        # Terraform de la instancia EC2
+│       └── floci/      # Floci + Terraform del clúster EKS
 └── README.md
 ```
 
@@ -62,9 +66,155 @@ Python 3.12 · FastAPI · Uvicorn · `concurrent.futures` / `threading` · Postg
 
 En GitHub: *Settings → Pages → Build and deployment → Deploy from a branch*, rama `main`, carpeta `/ (root)`. La página queda en `https://<usuario>.github.io/voltrix-alertas-notificaciones/` y lee `openapi.yaml` del mismo repo.
 
-## Cómo ejecutar
+## Cómo ejecutar en local
 
-Pendiente para el Avance 1 (esqueleto con docker-compose y datos de ejemplo según el contrato). La API escucha en el puerto común `8080`.
+Requisitos: Docker con Compose v2. La API escucha en el puerto común `8080`.
+
+```bash
+cp .env.example .env            # cambie POSTGRES_PASSWORD
+docker compose --env-file .env -f deploy/compose/docker-compose.yml up -d --build --wait
+curl http://localhost:8080/health
+```
+
+Detener: `docker compose --env-file .env -f deploy/compose/docker-compose.yml down` (agregue `-v` para borrar los datos).
+
+Configuración, solo por variables de entorno (ver [`.env.example`](.env.example)):
+
+| Variable | Defecto | Uso |
+| --- | --- | --- |
+| `DATABASE_URL` | `postgresql://voltrix:voltrix@localhost:5432/alertas` | PostgreSQL. En compose se arma con `POSTGRES_*`. |
+| `TELEMETRIA_URL` | vacía | URL base de Telemetría (Equipo 2). Vacía: `POST /alertas` con `plantaId` usa lecturas de ejemplo. |
+| `WORKERS` | `4` | Workers por defecto en `modo=paralelo`. |
+| `MAX_CONCURRENCIA` | `16` | Peticiones simultáneas antes de responder `429 SOBRECARGA` (no cuenta `/health` ni `/openapi.yaml`). |
+
+Al arrancar, la API aplica las migraciones de [`app/migraciones/`](app/migraciones) (tablas `umbral` y `alerta`, índice único parcial y datos semilla). Usa un advisory lock, así que varias réplicas pueden arrancar a la vez.
+
+### Pruebas
+
+```bash
+uv venv -p 3.12 .venv && uv pip install -p .venv/bin/python -r requirements-dev.txt
+.venv/bin/pytest                                          # en proceso, con repositorio en memoria
+VOLTRIX_BASE_URL=http://localhost:8080 .venv/bin/pytest   # contra el servicio levantado (local o EC2)
+```
+
+Las pruebas validan cada respuesta contra [`openapi.yaml`](openapi.yaml) con `openapi-core`: códigos, esquemas y encabezados. Cubren las respuestas 200, 400, 429 y 503.
+
+### Alcance del Avance 1
+
+- `POST /alertas` evalúa de verdad contra los umbrales de [docs/diseno.md](docs/diseno.md#3-modelo-de-datos-y-umbrales): 3 lecturas en violación crean la alerta, el tipo se deduce del ID y la caída de potencia se calcula contra la mediana del panel. Todavía no persiste, por eso `alertasActualizadas` y `duplicadasEvitadas` valen 0.
+- `modo=paralelo` ya existe en el contrato, pero delega en la evaluación secuencial. Los workers, los locks por franja y la cola son del Avance 2, y su interfaz está en [`app/concurrencia.py`](app/concurrencia.py).
+- `GET /alertas/estado` lee de PostgreSQL las alertas semilla (`PL-001-PS-07`, `PL-002-BB-01`, `PL-041-TB-03`).
+
+## Desplegar en EC2 (Componente B)
+
+Requisitos: Terraform ≥ 1.6 y credenciales de AWS (`aws login`). La instancia clona este repositorio público, así que despliega lo que esté en `main`.
+
+```bash
+cd deploy/iac/ec2
+terraform init
+terraform apply                      # opcional: -var instance_type=... -var ssh_cidr=$(curl -s ifconfig.me)/32
+terraform output                     # IP, url_base, url_health, url_openapi, ssh
+```
+
+Terraform crea un par de claves SSH (guardado en `deploy/iac/ec2/voltrix-alertas.pem`, ignorado por git) y un security group que solo abre los puertos 22 y 8080. Crea una instancia Ubuntu 24.04 con IMDSv2 y un disco gp3 cifrado de 8 GiB. Antes de crear nada, el plan falla si el tipo de instancia no es elegible para la capa gratuita de la cuenta.
+
+El [user-data](deploy/iac/ec2/user-data.sh.tftpl) hace todo lo demás:
+- crea 1 GiB de swap;
+- instala Docker y Compose;
+- clona el repo y genera `.env` con una clave aleatoria de PostgreSQL;
+- levanta el compose y espera a `/health`.
+
+Tarda unos 3 a 5 minutos; el registro queda en `/var/log/voltrix-user-data.log`. Para eliminar todo: `terraform destroy`.
+
+## Crear el clúster en Floci EKS (Componente A)
+
+Requisitos: Docker **rootful** (Floci arranca un contenedor `rancher/k3s` por clúster a través del socket), AWS CLI v2 y kubectl. Terraform es opcional: si falta, el script usa la imagen `hashicorp/terraform`.
+
+```bash
+deploy/iac/floci/desplegar.sh            # Floci + Terraform + kubeconfig + imagen + manifiestos
+deploy/iac/floci/desplegar.sh destruir   # borra el clúster
+```
+
+Qué hace el script:
+
+1. Levanta Floci 2.5.0 ([`docker-compose.yml`](deploy/iac/floci/docker-compose.yml)) con `FLOCI_SERVICES_IAM_ENFORCEMENT_ENABLED=true`, para que Floci evalúe las políticas IAM.
+2. Aplica [Terraform](deploy/iac/floci/main.tf) contra `http://localhost:4566`. Crea:
+   - una VPC con 2 subredes;
+   - el rol del clúster, que solo puede asumir `eks.amazonaws.com` de la misma cuenta (condición `aws:SourceAccount`) y lleva únicamente `AmazonEKSClusterPolicy`;
+   - el clúster EKS 1.33;
+   - un usuario operador que solo puede hacer `eks:DescribeCluster` sobre ese clúster.
+3. Genera el kubeconfig con `aws eks update-kubeconfig` usando el operador.
+4. Construye la imagen y la importa al nodo k3s (`ctr images import`), porque la imagen no está en un registro.
+5. Aplica [`deploy/k8s/`](deploy/k8s) con Kustomize:
+   - el Deployment de la API: 2 réplicas, sondas sobre `/health`, `requests` y `limits`, usuario no root y sistema de archivos de solo lectura;
+   - el Service, el ConfigMap y un Secret de ejemplo;
+   - un PostgreSQL de demostración.
+
+Supuestos sobre Floci, verificados al probar:
+- No acepta `test/test` en `aws eks get-token`, por eso existe el usuario operador.
+- El rango de puertos 6500–6599 debe quedar libre en el host para el API server de k3s.
+- El nodegroup sería solo metadatos (k3s tiene un único nodo), así que no se crea.
+
+## Evidencia del Avance 1
+
+Comandos que demuestran cada punto. `B` es la URL base: `http://localhost:8080` en local o el output `url_base` de Terraform en EC2.
+
+```bash
+B=http://<ip-ec2>:8080
+
+# Salud y contrato (X-Request-Id en toda respuesta)
+curl -i $B/health
+curl -sI $B/openapi.yaml                       # content-type: application/yaml
+
+# Estado de alertas (lo consume el Equipo 6) con filtros y paginación
+curl -s -H 'X-Equipo-Consumidor: equipo-6' "$B/alertas/estado" | jq '{totalActivas, porSeveridad, resumenPorActivo}'
+curl -s "$B/alertas/estado?plantaId=PL-041&estado=todas&limit=1&offset=1" | jq '{total, datos: [.datos[].id]}'
+
+# Evaluar un lote: crea 1 alerta crítica y devuelve MetricasProcesamiento
+curl -s -X POST "$B/alertas?modo=paralelo&workers=4" -H 'Content-Type: application/json' \
+  -H 'X-Equipo-Consumidor: equipo-6' -d '{"lecturas": [
+  {"plantaId":"PL-002","activoId":"PL-002-BB-01","tipoActivo":"banco_baterias","fechaHora":"2026-11-25T13:05:00Z","metrica":"temperatura","valor":46.3,"unidad":"C"},
+  {"plantaId":"PL-002","activoId":"PL-002-BB-01","tipoActivo":"banco_baterias","fechaHora":"2026-11-25T13:05:10Z","metrica":"temperatura","valor":47.1,"unidad":"C"},
+  {"plantaId":"PL-002","activoId":"PL-002-BB-01","tipoActivo":"banco_baterias","fechaHora":"2026-11-25T13:05:20Z","metrica":"temperatura","valor":45.9,"unidad":"C"}]}' | jq
+
+# 400 SOLICITUD_INVALIDA con el esquema común Error
+curl -si -X POST $B/alertas -H 'Content-Type: application/json' \
+  -d '{"lecturas":[{"plantaId":"PL-002","activoId":"PL-002-BB-01","fechaHora":"2026-11-25T13:05:00Z","metrica":"temperatura","valor":46,"unidad":"C"}],"plantaId":"PL-002"}'
+
+# Las respuestas del servicio desplegado cumplen el contrato
+VOLTRIX_BASE_URL=$B .venv/bin/pytest
+```
+
+En la instancia (`ssh -i deploy/iac/ec2/voltrix-alertas.pem ubuntu@<ip-ec2>`, luego `cd /opt/voltrix-alertas`):
+
+```bash
+C="sudo docker compose --env-file .env -f deploy/compose/docker-compose.yml"
+$C ps                                   # api y db healthy; solo 8080 publicado
+sudo docker stats --no-stream           # api ≤ 384 MiB, db ≤ 256 MiB
+free -m                                 # 1 GiB de RAM + 1 GiB de swap
+$C logs api | grep equipo-6             # logs JSON con requestId y X-Equipo-Consumidor
+
+# 503 en /health con la base de datos detenida, y recuperación
+$C stop db && curl -i localhost:8080/health
+$C start db && sleep 5 && curl -i localhost:8080/health
+```
+
+Floci EKS:
+
+```bash
+kubectl get nodes
+kubectl -n voltrix-alertas get deploy,pods,svc            # 2/2 réplicas de alertas-api
+kubectl -n voltrix-alertas port-forward svc/alertas-api 18080:8080 &
+curl -s localhost:18080/health
+aws eks describe-cluster --name voltrix-alertas --query 'cluster.[status,version,roleArn]'
+aws iam list-roles   # con el operador: AccessDenied (mínimo privilegio)
+```
+
+Resultados de la verificación local del 26 nov 2026:
+- `docker stats`: api 58 MiB / 384 MiB y db 15 MiB / 256 MiB.
+- `/health` responde 503 en unos 3 s con la base de datos detenida y vuelve a 200 al arrancarla.
+- Las pruebas pasan en proceso y contra el compose.
+- En Floci, el nodo `v1.33.1+k3s1` queda `Ready` y las 2 réplicas `Running`. El operador recibe `AccessDenied` en `iam:ListRoles` y `eks:DeleteCluster`.
 
 ## Cronograma
 
