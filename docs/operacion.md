@@ -103,7 +103,7 @@ Problemas conocidos:
   ssh -i deploy/iac/ec2/voltrix-alertas.pem -f -N -D 1080 ubuntu@3.151.244.68
   curl -i --socks5-hostname localhost:1080 http://voltrix-alertas.inmemorialake.dev:8080/health
   ALL_PROXY=socks5h://localhost:1080 VOLTRIX_BASE_URL=http://voltrix-alertas.inmemorialake.dev:8080 .venv/bin/pytest
-  chromium --proxy-server="socks5://localhost:1080" --user-data-dir=/tmp/chrome-voltrix   # navegador por el túnel
+  google-chrome-stable --proxy-server="socks5://localhost:1080" --user-data-dir=/tmp/chrome-voltrix   # navegador por el túnel
   ```
 
   En Firefox: *Ajustes → Configuración de red → Proxy manual → SOCKS v5 `localhost` puerto `1080`*, y marque "DNS por proxy". Para cerrar el túnel: `pkill -f "ssh.*-D 1080"`.

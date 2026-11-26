@@ -219,7 +219,7 @@ curl -si -X POST $B/alertas -H 'Content-Type: application/json' \
 VOLTRIX_BASE_URL=$B .venv/bin/pytest
 ```
 
-En la instancia (`ssh -i deploy/iac/ec2/voltrix-alertas.pem ubuntu@<ip-ec2>`, luego `cd /opt/voltrix-alertas`):
+En la instancia (`ssh -i deploy/iac/ec2/voltrix-alertas.pem ubuntu@3.151.244.68`, luego `cd /opt/voltrix-alertas`):
 
 ```bash
 C="sudo docker compose --env-file .env -f deploy/compose/docker-compose.yml"
