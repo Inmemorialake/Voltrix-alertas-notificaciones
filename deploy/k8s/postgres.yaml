@@ -1,0 +1,58 @@
+# PostgreSQL para la demostración en Floci (1 réplica, datos en emptyDir: se pierden al
+# reiniciar el pod). Las 2 réplicas de la API comparten esta base de datos.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db
+  namespace: voltrix-alertas
+  labels:
+    app.kubernetes.io/name: db
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: db
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          args: ["-c", "shared_buffers=32MB", "-c", "max_connections=20", "-c", "work_mem=2MB"]
+          envFrom:
+            - secretRef:
+                name: alertas-db
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: datos
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: datos
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+  namespace: voltrix-alertas
+spec:
+  selector:
+    app.kubernetes.io/name: db
+  ports:
+    - port: 5432

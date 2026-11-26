@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertas-config
+  namespace: voltrix-alertas
+data:
+  # Workers por defecto para modo=paralelo.
+  WORKERS: "4"
+  # Peticiones simultáneas antes de responder 429 SOBRECARGA.
+  MAX_CONCURRENCIA: "16"
+  # URL base de Telemetría de Plantas (Equipo 2). Vacía: lecturas de ejemplo.
+  TELEMETRIA_URL: ""
+  NIVEL_LOG: "INFO"
