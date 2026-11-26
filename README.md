@@ -22,7 +22,7 @@ flowchart LR
 
 ## API
 
-Documentación navegable (Redoc): <https://inmemorialake.github.io/voltrix-alertas-notificaciones/>
+Documentación navegable (Redoc): <https://inmemorialake.github.io/voltrix-alertas-notificaciones/> y, desde el propio servicio, <http://voltrix-alertas.inmemorialake.dev:8080/docs>
 
 Contrato completo: [`openapi.yaml`](openapi.yaml) (OpenAPI 3.0.3, también en [`openapi.json`](openapi.json)). Sigue la plantilla común de Voltrix Energy (Equipo 1) registrada en la hoja Coordinacion_Voltrix.
 
@@ -32,6 +32,7 @@ Contrato completo: [`openapi.yaml`](openapi.yaml) (OpenAPI 3.0.3, también en [`
 | `GET /alertas/estado` | Alertas vigentes con totales por severidad y resumen por activo (lo consume el Equipo 6). |
 | `GET /health` | Estado del servicio y de su base de datos. |
 | `GET /openapi.yaml` | Este contrato. |
+| `GET /docs` | Documentación navegable (Redoc) del mismo contrato, servida por la API; `/` redirige aquí. No forma parte del contrato. |
 
 ## Documentación
 

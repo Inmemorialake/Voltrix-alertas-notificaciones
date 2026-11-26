@@ -28,6 +28,7 @@ Entregable del enunciado: *esqueleto desplegado en EC2 con datos de ejemplo seg�
 | URL base | `http://voltrix-alertas.inmemorialake.dev:8080` |
 | `/health` | `http://voltrix-alertas.inmemorialake.dev:8080/health` |
 | Contrato | `http://voltrix-alertas.inmemorialake.dev:8080/openapi.yaml` |
+| Documentación (Redoc) | `http://voltrix-alertas.inmemorialake.dev:8080/docs` (`/` redirige aquí) |
 | IP | `3.151.244.68` (Elastic IP, fija), registro `A` DNS-only en Cloudflare |
 | Instancia | `i-00c45cd7c9644c74b`, `t3.micro` (x86_64, 1 GiB, 2 vCPU), `us-east-2`, Ubuntu 24.04 |
 | Cuenta | Plan gratuito nuevo de AWS (créditos), perfil `infraestructuras` |
