@@ -96,18 +96,18 @@ Problemas conocidos:
 
 ## Red de la universidad
 
-- **HTTP a la IP de EC2 da `403` con una página de Fortinet/OITEL.** El filtro bloquea las URLs sin categoría ("Unrated"), y `http://<ip>:8080` es una. No es un fallo del servicio. Pruebe desde otra red, como los datos del celular o la casa, o use un dominio (pendiente).
+- **HTTP a la IP o al dominio da `403` con una página de Fortinet/OITEL.** El filtro bloquea las URLs sin categoría ("Unrated"): la IP y también `voltrix-alertas.inmemorialake.dev`, que es nuevo. No es un fallo del servicio. Pruebe desde otra red, como los datos del celular o la casa. Para desbloquear el dominio en el campus, use el enlace "por favor siga este enlace" de la página de bloqueo (re-evaluación de Fortinet) y pida una categoría como *Information Technology*.
 - **SSH da *timeout*.** La IP de salida del campus cambia dentro de `45.5.164.0/22` (se vieron `45.5.165.19` y `45.5.167.167`). `terraform.tfvars` (copiado de `example.tfvars`) ya usa ese rango. Para entrar desde la casa, agregue su IP con `/32`.
 - **Equipos que consumen desde el campus** se encontrarán el mismo bloqueo. Avíseles en la hoja o en la pestaña "Integraciones".
 
 ## Hoja Coordinacion_Voltrix
 
-Fila del Equipo 3 (la IP es fija; solo cambia si se destruye la Elastic IP):
+Fila del Equipo 3. El dominio apunta a la Elastic IP `3.151.244.68` con un registro `A` DNS-only en Cloudflare, que se gestiona a mano. Si se destruye la Elastic IP, actualice ese registro:
 
 | Columna | Valor |
 | --- | --- |
-| URL base | `terraform output -raw url_base` |
-| URL de `/health` | `terraform output -raw url_health` |
+| URL base | `http://voltrix-alertas.inmemorialake.dev:8080` |
+| URL de `/health` | `http://voltrix-alertas.inmemorialake.dev:8080/health` |
 | URL del contrato | Página Redoc del repo o `terraform output -raw url_openapi` |
 | Servicios que consume | Equipo 2, Telemetría de Plantas |
 | Fecha de actualización y contacto | Andrés Gerardo González Rosero |

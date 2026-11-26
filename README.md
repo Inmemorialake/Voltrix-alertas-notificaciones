@@ -143,21 +143,22 @@ Notas de operación:
 - **Costo.** La cuenta tiene el plan gratuito nuevo de AWS (créditos, vence el 10 may 2027). Una `t3.micro` encendida 24/7 consume unos 11–12 USD/mes del crédito: instancia ~7,6, IPv4 pública ~3,6 y EBS ~0,6.
 - **IP fija.** Terraform asocia una Elastic IP, así que la URL no cambia al detener y arrancar la instancia. Con la instancia detenida, la Elastic IP sigue cobrando (~3,6 USD/mes).
 - **El estado de Terraform es local** (`terraform.tfstate`, ignorado por git) y está en el equipo de quien hizo el `apply`. Sin ese archivo, otro integrante no puede modificar ni destruir la instancia con Terraform.
-- **Red de la universidad.** El filtro Fortinet de OITEL responde `403` a las URLs sin categoría ("Unrated"), como `http://<ip>:8080`. Pruebe desde otra red, por ejemplo los datos del celular. La IP de salida del campus cambia dentro de `45.5.164.0/22`, por eso `ssh_cidr` usa ese rango y no una sola IP.
+- **Red de la universidad.** El filtro Fortinet de OITEL responde `403` a las URLs sin categoría ("Unrated"), como `http://<ip>:8080` o el dominio `voltrix-alertas.inmemorialake.dev`, que es nuevo y aún no tiene categoría. Pruebe desde otra red, por ejemplo los datos del celular. La IP de salida del campus cambia dentro de `45.5.164.0/22`, por eso `ssh_cidr` usa ese rango y no una sola IP.
 
 ### Despliegue vigente
 
 | Campo | Valor |
 | --- | --- |
 | Instancia | `i-00c45cd7c9644c74b`, `t3.micro` (x86_64, 1 GiB), `us-east-2` |
-| URL base | <http://3.151.244.68:8080> |
-| `/health` | <http://3.151.244.68:8080/health> |
-| Contrato | <http://3.151.244.68:8080/openapi.yaml> |
+| URL base | <http://voltrix-alertas.inmemorialake.dev:8080> |
+| `/health` | <http://voltrix-alertas.inmemorialake.dev:8080/health> |
+| Contrato | <http://voltrix-alertas.inmemorialake.dev:8080/openapi.yaml> |
+| IP (Elastic IP) | `3.151.244.68`; registro `A` DNS-only en Cloudflare |
 | Desplegado | 26 nov 2026; `/health` respondió `disponible` a los 100 s del arranque |
 
 ### Pendientes del despliegue
 
-- **Subdominio en Cloudflare** (`alertas.<dominio>`, registro DNS-only), creado con Terraform y opcional por variable. También podría evitar el bloqueo "Unrated" del Fortinet, aunque no está garantizado.
+- **HTTPS con Caddy en 80/443** (opcional): implica abrir esos puertos y sale de la convención común `http://{host}:8080`. Habría que acordarlo con el Equipo 1.
 
 ## Crear el clúster en Floci EKS (Componente A)
 
@@ -193,7 +194,7 @@ Supuestos sobre Floci, verificados al probar:
 Resultados medidos y lista de capturas en [docs/avance-1.md](docs/avance-1.md). Comandos que demuestran cada punto (`B` es la URL base: `http://localhost:8080` en local o el output `url_base` de Terraform en EC2).
 
 ```bash
-B=http://3.151.244.68:8080
+B=http://voltrix-alertas.inmemorialake.dev:8080
 
 # Salud y contrato (X-Request-Id en toda respuesta)
 curl -i $B/health
