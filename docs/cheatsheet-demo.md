@@ -109,7 +109,11 @@ Si `jq` no está en la instancia, quite el `| jq`.
 
 ## Terminal 3 · Floci (parte 8)
 
-Use la terminal donde corrió `desplegar.sh`, o pegue las variables que imprimió al final (`KUBECONFIG`, `AWS_ENDPOINT_URL`, `AWS_REGION` y las credenciales del operador). En esta terminal **no** defina `ALL_PROXY`.
+En esta terminal **no** defina `ALL_PROXY`. Cargue las variables del operador, que `desplegar.sh` deja en un archivo ignorado por git:
+
+```fish
+source deploy/iac/floci/operador.fish
+```
 
 ```fish
 kubectl get nodes

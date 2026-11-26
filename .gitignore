@@ -26,6 +26,7 @@ bench/results/*.png
 
 # Kubernetes / AWS
 kubeconfig*
+deploy/iac/floci/operador.*
 *.pem
 
 # Editor y sistema

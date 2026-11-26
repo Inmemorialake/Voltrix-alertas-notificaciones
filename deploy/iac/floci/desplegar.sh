@@ -52,11 +52,23 @@ kubectl -n voltrix-alertas rollout status deploy/db --timeout=180s
 kubectl -n voltrix-alertas rollout status deploy/alertas-api --timeout=180s
 kubectl -n voltrix-alertas get pods,svc
 
-cat <<EOF
+# Variables para otra terminal. Archivos ignorados por git: contienen la clave del operador.
+umask 077
+cat > "$DIR/operador.env" <<EOF
+export KUBECONFIG="$KUBECONFIG" AWS_ENDPOINT_URL=http://localhost:4566 AWS_REGION=us-east-1
+export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+unset AWS_PROFILE AWS_SESSION_TOKEN
+EOF
+cat > "$DIR/operador.fish" <<EOF
+set -gx KUBECONFIG "$KUBECONFIG"; set -gx AWS_ENDPOINT_URL http://localhost:4566; set -gx AWS_REGION us-east-1
+set -gx AWS_ACCESS_KEY_ID "$AWS_ACCESS_KEY_ID"; set -gx AWS_SECRET_ACCESS_KEY "$AWS_SECRET_ACCESS_KEY"
+set -e AWS_PROFILE; set -e AWS_SESSION_TOKEN
+EOF
 
-Listo. Para usar kubectl en otra terminal:
-  export KUBECONFIG="$KUBECONFIG" AWS_ENDPOINT_URL=http://localhost:4566 AWS_REGION=us-east-1
-  export AWS_ACCESS_KEY_ID=\$(terraform -chdir="$DIR" output -raw operador_access_key_id)
-  export AWS_SECRET_ACCESS_KEY=\$(terraform -chdir="$DIR" output -raw operador_secret_access_key)
-  kubectl -n voltrix-alertas port-forward svc/alertas-api 18080:8080
+cat <<'EOF'
+
+Listo. Para usar kubectl en otra terminal, cargue las variables del operador:
+  source deploy/iac/floci/operador.fish    # fish
+  source deploy/iac/floci/operador.env     # bash
+  kubectl -n voltrix-alertas port-forward svc/alertas-api 18081:8080
 EOF
