@@ -104,3 +104,15 @@ resource "aws_instance" "api" {
     Name = var.nombre
   }
 }
+
+# ------------------------------ IP fija ------------------------------
+# Elastic IP: la URL de la hoja Coordinacion_Voltrix no cambia al detener y arrancar.
+# Cuesta lo mismo que una IPv4 pública mientras esté asociada a la instancia encendida.
+resource "aws_eip" "api" {
+  domain   = "vpc"
+  instance = aws_instance.api.id
+
+  tags = {
+    Name = var.nombre
+  }
+}
