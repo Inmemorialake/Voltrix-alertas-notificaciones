@@ -12,13 +12,14 @@ FROM python:3.12-slim
 ENV PATH=/opt/venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    OPENAPI_PATH=/srv/openapi.yaml
+    OPENAPI_PATH=/srv/openapi.yaml \
+    DOCS_PATH=/srv/index.html
 RUN groupadd --system --gid 10001 alertas \
  && useradd --system --uid 10001 --gid alertas --no-create-home --shell /usr/sbin/nologin alertas
 WORKDIR /srv
 COPY --from=deps /opt/venv /opt/venv
 COPY app/ ./app/
-COPY openapi.yaml ./openapi.yaml
+COPY openapi.yaml index.html ./
 USER 10001:10001
 EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \

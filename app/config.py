@@ -36,6 +36,8 @@ class Config:
     puerto: int = 8080
     nivel_log: str = "INFO"
     openapi_path: Path = RAIZ_REPO / "openapi.yaml"
+    # Página Redoc (la misma de GitHub Pages) que se sirve en /docs.
+    docs_path: Path = RAIZ_REPO / "index.html"
     version: str = __version__
 
     @classmethod
@@ -49,4 +51,5 @@ class Config:
             puerto=_entero("PUERTO", defecto.puerto, minimo=1),
             nivel_log=os.environ.get("NIVEL_LOG", defecto.nivel_log).upper(),
             openapi_path=Path(os.environ.get("OPENAPI_PATH", defecto.openapi_path)),
+            docs_path=Path(os.environ.get("DOCS_PATH", defecto.docs_path)),
         )

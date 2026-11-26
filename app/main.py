@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Annotated, Literal
 
 from fastapi import Body, FastAPI, Header, Query, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from app.config import Config
 from app.errores import ErrorApi, registrar_manejadores, request_id
@@ -73,6 +73,8 @@ def create_app(
     repo: RepositorioAlertas = repositorio or RepositorioPostgres(config.database_url)
     cliente_telemetria = telemetria or ClienteTelemetria(config.telemetria_url)
     contrato = config.openapi_path.read_bytes()
+    # index.html carga "openapi.yaml" con ruta relativa: servida en /docs, lee /openapi.yaml.
+    pagina_docs = config.docs_path.read_bytes() if config.docs_path.is_file() else None
     inicio = time.monotonic()
 
     @asynccontextmanager
@@ -208,5 +210,16 @@ def create_app(
     @app.api_route("/openapi.yaml", methods=["GET", "HEAD"])
     def obtener_contrato() -> Response:
         return Response(contrato, media_type="application/yaml")
+
+    # Fuera del contrato: documentación navegable (Redoc) del mismo openapi.yaml.
+    if pagina_docs is not None:
+
+        @app.api_route("/docs", methods=["GET", "HEAD"], include_in_schema=False)
+        def documentacion() -> HTMLResponse:
+            return HTMLResponse(pagina_docs)
+
+        @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
+        def raiz() -> RedirectResponse:
+            return RedirectResponse("/docs", status_code=307)
 
     return app

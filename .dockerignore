@@ -1,4 +1,5 @@
 *
 !app/
 !openapi.yaml
+!index.html
 app/**/__pycache__

@@ -229,3 +229,18 @@ def test_head_en_rutas_de_operacion(cliente, ruta):
     assert resp.status_code == 200
     assert resp.content == b""
     uuid.UUID(resp.headers["X-Request-Id"])
+
+
+# ------------------------- documentación (fuera del contrato) -------------------------
+def test_docs_sirve_redoc_del_contrato(cliente):
+    resp = cliente.get("/docs")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/html")
+    assert "Redoc.init('openapi.yaml'" in resp.text
+    uuid.UUID(resp.headers["X-Request-Id"])
+
+
+def test_raiz_redirige_a_docs(cliente):
+    resp = cliente.get("/", follow_redirects=False)
+    assert resp.status_code == 307
+    assert resp.headers["location"] == "/docs"

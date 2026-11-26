@@ -16,7 +16,7 @@ from app.errores import respuesta_error
 log = logging.getLogger("alertas.http")
 
 # Operación: no cuentan contra el límite, para que las sondas no fallen bajo carga.
-RUTAS_EXENTAS = frozenset({"/health", "/openapi.yaml"})
+RUTAS_EXENTAS = frozenset({"/health", "/openapi.yaml", "/docs", "/"})
 RETRY_AFTER_SEG = 1
 
 
