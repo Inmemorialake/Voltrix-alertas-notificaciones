@@ -42,7 +42,7 @@ $C up -d --build --wait
 curl -s localhost:8080/health
 ```
 
-Si no hay acceso SSH, `terraform apply -replace=aws_instance.api` crea una instancia nueva que clona `main`. La IP cambia, salvo que haya una Elastic IP.
+Si no hay acceso SSH, `terraform apply -replace=aws_instance.api` crea una instancia nueva que clona `main`. La Elastic IP se reasocia, así que la URL no cambia.
 
 ### Revisar estado y logs
 
@@ -67,8 +67,8 @@ aws ec2 get-console-output --instance-id "$ID" --latest --output text
 
 | Acción | Comando | Efecto en costo e IP |
 | --- | --- | --- |
-| Detener | `aws ec2 stop-instances --instance-ids <id>` | Deja de cobrar la instancia; sigue cobrando el disco (~0,6 USD/mes). **La IP cambia** al encender |
-| Encender | `aws ec2 start-instances --instance-ids <id>` | El compose arranca solo (`restart: unless-stopped`). Actualice la hoja con la IP nueva |
+| Detener | `aws ec2 stop-instances --instance-ids <id>` | Deja de cobrar la instancia; siguen cobrando el disco (~0,6 USD/mes) y la Elastic IP (~3,6 USD/mes). La IP no cambia |
+| Encender | `aws ec2 start-instances --instance-ids <id>` | El compose arranca solo (`restart: unless-stopped`) |
 | Destruir | `terraform destroy` | Borra todo. La base de datos solo tiene datos de ejemplo |
 
 Costo con la instancia encendida 24/7: ~11–12 USD/mes del crédito del plan gratuito (vence el 10 may 2027). Créditos restantes:
@@ -97,12 +97,12 @@ Problemas conocidos:
 ## Red de la universidad
 
 - **HTTP a la IP de EC2 da `403` con una página de Fortinet/OITEL.** El filtro bloquea las URLs sin categoría ("Unrated"), y `http://<ip>:8080` es una. No es un fallo del servicio. Pruebe desde otra red, como los datos del celular o la casa, o use un dominio (pendiente).
-- **SSH da *timeout*.** La IP de salida del campus cambia dentro de `45.5.164.0/22` (se vieron `45.5.165.19` y `45.5.167.167`). Use `-var ssh_cidr=45.5.164.0/22` o abra SSH desde su IP de casa con `/32`.
+- **SSH da *timeout*.** La IP de salida del campus cambia dentro de `45.5.164.0/22` (se vieron `45.5.165.19` y `45.5.167.167`). `terraform.tfvars` (copiado de `example.tfvars`) ya usa ese rango. Para entrar desde la casa, agregue su IP con `/32`.
 - **Equipos que consumen desde el campus** se encontrarán el mismo bloqueo. Avíseles en la hoja o en la pestaña "Integraciones".
 
 ## Hoja Coordinacion_Voltrix
 
-Actualizar la fila del Equipo 3 cada vez que cambie la IP:
+Fila del Equipo 3 (la IP es fija; solo cambia si se destruye la Elastic IP):
 
 | Columna | Valor |
 | --- | --- |

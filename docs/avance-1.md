@@ -25,9 +25,10 @@ Entregable del enunciado: *esqueleto desplegado en EC2 con datos de ejemplo seg�
 
 | Campo | Valor |
 | --- | --- |
-| URL base | `http://18.222.99.242:8080` |
-| `/health` | `http://18.222.99.242:8080/health` |
-| Contrato | `http://18.222.99.242:8080/openapi.yaml` |
+| URL base | `http://3.151.244.68:8080` |
+| `/health` | `http://3.151.244.68:8080/health` |
+| Contrato | `http://3.151.244.68:8080/openapi.yaml` |
+| IP | `3.151.244.68` (Elastic IP, fija) |
 | Instancia | `i-00c45cd7c9644c74b`, `t3.micro` (x86_64, 1 GiB, 2 vCPU), `us-east-2`, Ubuntu 24.04 |
 | Cuenta | Plan gratuito nuevo de AWS (créditos), perfil `infraestructuras` |
 
@@ -72,6 +73,8 @@ Ejemplo de log, una línea JSON por petición:
 | `terraform plan` | 8 recursos; SSH limitado a un rango, 8080 abierto; precondición de capa gratuita aprobada |
 | `terraform apply` | Instancia creada en 14 s |
 | Salida de consola (cloud-init) | Compose *healthy* y `/health` → `disponible` a los 100 s del arranque |
+| Elastic IP y `ssh_cidr` del campus | 1 recurso nuevo y 1 cambio, sin reemplazar la instancia; SSH funciona desde el campus |
+| En la instancia | `free -m`: 909 MiB de RAM + 1023 MiB de swap; `docker stats`: api 51 MiB / 384 MiB, db 37 MiB / 256 MiB |
 
 ### Floci EKS (Floci 2.5.0)
 
@@ -89,12 +92,12 @@ Ejemplo de log, una línea JSON por petición:
 
 Tomarlas **desde fuera de la red de la universidad**, por ejemplo con los datos del celular, porque el Fortinet bloquea las URLs que son solo una IP (ver [operacion.md](operacion.md#red-de-la-universidad)).
 
-- [ ] Navegador o `curl -i` a `http://18.222.99.242:8080/health` mostrando `X-Request-Id`
+- [ ] Navegador o `curl -i` a `http://3.151.244.68:8080/health` mostrando `X-Request-Id`
 - [ ] `curl` a `/alertas/estado` y a `POST /alertas` contra EC2
 - [ ] Un 400 contra EC2
 - [ ] En la instancia: `docker compose ps`, `docker stats --no-stream`, `free -m`
 - [ ] En la instancia: 503 de `/health` con `db` detenida y recuperación
-- [ ] `VOLTRIX_BASE_URL=http://18.222.99.242:8080 pytest` en verde
+- [ ] `VOLTRIX_BASE_URL=http://3.151.244.68:8080 pytest` en verde
 - [ ] Floci: `kubectl get nodes` y `kubectl -n voltrix-alertas get deploy,pods,svc`
 - [ ] Fila actualizada en la hoja Coordinacion_Voltrix
 
@@ -105,6 +108,4 @@ Tomarlas **desde fuera de la red de la universidad**, por ejemplo con los datos 
 | Núcleo concurrente: workers, locks por franja, cola y despachador con `INSERT … ON CONFLICT` | Avance 2 | Interfaz en `app/concurrencia.py` |
 | Benchmark secuencial frente a paralelo (`bench/`) | Avance 2 | [Plan en el diseño](diseno.md#6-plan-de-benchmark) |
 | Consumo real de Telemetría (Equipo 2) | Avance 2 | Basta con definir `TELEMETRIA_URL` |
-| Elastic IP para que la URL no cambie | Por decidir | Mismo costo mientras esté asociada |
 | Subdominio en Cloudflare (DNS-only) | Por decidir | Podría evitar el bloqueo del Fortinet |
-| SSH desde el campus | Por aplicar | `ssh_cidr=45.5.164.0/22` y nuevo `apply` |

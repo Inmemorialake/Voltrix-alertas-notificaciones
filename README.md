@@ -116,7 +116,8 @@ Requisitos: Terraform ≥ 1.6 y credenciales de AWS. La cuenta del equipo usa el
 cd deploy/iac/ec2
 export AWS_PROFILE=infraestructuras
 terraform init
-terraform plan -var ssh_cidr=45.5.164.0/22 -out=tfplan   # revise el plan antes de aplicar
+cp example.tfvars terraform.tfvars  # tipo de instancia y ssh_cidr (rango del campus)
+terraform plan -out=tfplan           # revise el plan antes de aplicar
 terraform apply tfplan
 terraform output                     # IP, url_base, url_health, url_openapi, ssh
 ```
@@ -124,6 +125,7 @@ terraform output                     # IP, url_base, url_health, url_openapi, ss
 Terraform crea:
 - un par de claves SSH (la privada se guarda en `deploy/iac/ec2/voltrix-alertas.pem`, ignorado por git);
 - un security group que solo abre los puertos 22 y 8080;
+- una Elastic IP, para que la URL no cambie;
 - una instancia Ubuntu 24.04 con IMDSv2 y disco gp3 cifrado de 8 GiB.
 
 El plan falla antes de crear nada si el tipo de instancia no es elegible para la capa gratuita de la cuenta.
@@ -139,7 +141,7 @@ Tarda unos 2 minutos; el registro queda en `/var/log/voltrix-user-data.log` y en
 Notas de operación:
 
 - **Costo.** La cuenta tiene el plan gratuito nuevo de AWS (créditos, vence el 10 may 2027). Una `t3.micro` encendida 24/7 consume unos 11–12 USD/mes del crédito: instancia ~7,6, IPv4 pública ~3,6 y EBS ~0,6.
-- **La IP no es fija.** Se conserva al reiniciar, pero cambia si la instancia se detiene y arranca. Si cambia, actualice la hoja Coordinacion_Voltrix con el nuevo `terraform output url_base`.
+- **IP fija.** Terraform asocia una Elastic IP, así que la URL no cambia al detener y arrancar la instancia. Con la instancia detenida, la Elastic IP sigue cobrando (~3,6 USD/mes).
 - **El estado de Terraform es local** (`terraform.tfstate`, ignorado por git) y está en el equipo de quien hizo el `apply`. Sin ese archivo, otro integrante no puede modificar ni destruir la instancia con Terraform.
 - **Red de la universidad.** El filtro Fortinet de OITEL responde `403` a las URLs sin categoría ("Unrated"), como `http://<ip>:8080`. Pruebe desde otra red, por ejemplo los datos del celular. La IP de salida del campus cambia dentro de `45.5.164.0/22`, por eso `ssh_cidr` usa ese rango y no una sola IP.
 
@@ -148,14 +150,13 @@ Notas de operación:
 | Campo | Valor |
 | --- | --- |
 | Instancia | `i-00c45cd7c9644c74b`, `t3.micro` (x86_64, 1 GiB), `us-east-2` |
-| URL base | <http://18.222.99.242:8080> |
-| `/health` | <http://18.222.99.242:8080/health> |
-| Contrato | <http://18.222.99.242:8080/openapi.yaml> |
+| URL base | <http://3.151.244.68:8080> |
+| `/health` | <http://3.151.244.68:8080/health> |
+| Contrato | <http://3.151.244.68:8080/openapi.yaml> |
 | Desplegado | 26 nov 2026; `/health` respondió `disponible` a los 100 s del arranque |
 
 ### Pendientes del despliegue
 
-- **Elastic IP**, para que la URL de la hoja no cambie. Cuesta lo mismo que la IP actual mientras esté asociada.
 - **Subdominio en Cloudflare** (`alertas.<dominio>`, registro DNS-only), creado con Terraform y opcional por variable. También podría evitar el bloqueo "Unrated" del Fortinet, aunque no está garantizado.
 
 ## Crear el clúster en Floci EKS (Componente A)
@@ -192,7 +193,7 @@ Supuestos sobre Floci, verificados al probar:
 Resultados medidos y lista de capturas en [docs/avance-1.md](docs/avance-1.md). Comandos que demuestran cada punto (`B` es la URL base: `http://localhost:8080` en local o el output `url_base` de Terraform en EC2).
 
 ```bash
-B=http://18.222.99.242:8080
+B=http://3.151.244.68:8080
 
 # Salud y contrato (X-Request-Id en toda respuesta)
 curl -i $B/health

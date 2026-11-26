@@ -26,3 +26,5 @@ Registro breve de decisiones tomadas al implementar, con su motivo. Complementa 
 | D20 | La imagen se importa al nodo k3s con `ctr images import` y `imagePullPolicy: IfNotPresent` | Lo más simple en local. El ECR de Floci también sirve y queda como opción | Publicar en un registro externo |
 | D21 | Sin nodegroup en Floci | En Floci los nodegroups son solo metadatos y k3s ya trae un nodo | Crear un nodegroup que no agrega nodos |
 | D22 | Cloudflare, si se adopta, en modo DNS-only | Conserva la IP real del cliente en los logs y simplifica depurar integraciones | Proxy naranja, que también admite el 8080 |
+| D23 | Elastic IP en la instancia | La URL registrada en la hoja no cambia al detener y arrancar. Mientras está asociada no cuesta más que la IPv4 pública | IP automática, que cambia en cada arranque |
+| D24 | DNS en Cloudflare gestionado a mano desde la consola, fuera de Terraform | Así el Terraform no depende de una cuenta personal y un tercero lo reproduce sin token | Provider `cloudflare` con una variable opcional |
