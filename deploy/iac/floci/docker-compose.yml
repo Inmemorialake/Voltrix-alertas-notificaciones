@@ -1,0 +1,24 @@
+# Floci: emulador local de AWS. EKS levanta un contenedor rancher/k3s por clúster,
+# por eso necesita el socket de Docker (rootful).
+# Uso: docker compose -f deploy/iac/floci/docker-compose.yml up -d
+name: voltrix-floci
+
+services:
+  floci:
+    image: floci/floci:2.5.0
+    user: root
+    ports:
+      - "4566:4566"
+      # API server de los clústeres EKS (k3s) publicados en el host.
+      - "6500-6599:6500-6599"
+    environment:
+      FLOCI_STORAGE_MODE: persistent
+      # Evalúa las políticas IAM en las llamadas: así el mínimo privilegio se comprueba de verdad.
+      FLOCI_SERVICES_IAM_ENFORCEMENT_ENABLED: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - floci-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  floci-data:
