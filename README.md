@@ -35,7 +35,10 @@ Contrato completo: [`openapi.yaml`](openapi.yaml) (OpenAPI 3.0.3, también en [`
 
 ## Documentación
 
-- Diseño de la solución: [`docs/diseno.md`](docs/diseno.md).
+- [Diseño de la solución](docs/diseno.md): arquitectura, modelo de datos, concurrencia y benchmark.
+- [Avance 1](docs/avance-1.md): qué se entregó, evidencia medida y lista de capturas.
+- [Operación](docs/operacion.md): actualizar, revisar y apagar los despliegues; problemas conocidos.
+- [Decisiones técnicas](docs/decisiones.md): qué se decidió al implementar y por qué.
 
 ## Stack
 
@@ -186,7 +189,7 @@ Supuestos sobre Floci, verificados al probar:
 
 ## Evidencia del Avance 1
 
-Comandos que demuestran cada punto. `B` es la URL base: `http://localhost:8080` en local o el output `url_base` de Terraform en EC2.
+Resultados medidos y lista de capturas en [docs/avance-1.md](docs/avance-1.md). Comandos que demuestran cada punto (`B` es la URL base: `http://localhost:8080` en local o el output `url_base` de Terraform en EC2).
 
 ```bash
 B=http://18.222.99.242:8080
@@ -238,12 +241,6 @@ curl -s localhost:18080/health
 aws eks describe-cluster --name voltrix-alertas --query 'cluster.[status,version,roleArn]'
 aws iam list-roles   # con el operador: AccessDenied (mínimo privilegio)
 ```
-
-Resultados de la verificación local del 26 nov 2026:
-- `docker stats`: api 58 MiB / 384 MiB y db 15 MiB / 256 MiB.
-- `/health` responde 503 en unos 3 s con la base de datos detenida y vuelve a 200 al arrancarla.
-- Las pruebas pasan en proceso y contra el compose.
-- En Floci, el nodo `v1.33.1+k3s1` queda `Ready` y las 2 réplicas `Running`. El operador recibe `AccessDenied` en `iam:ListRoles` y `eks:DeleteCluster`.
 
 ## Cronograma
 

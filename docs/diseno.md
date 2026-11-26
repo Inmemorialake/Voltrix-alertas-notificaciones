@@ -18,6 +18,7 @@ El contrato vigente es [`openapi.yaml`](../openapi.yaml), que sigue la plantilla
 | --- | --- | --- |
 | 1.0 | 19 nov 2026 | Diseño y contrato iniciales |
 | 1.1 | 26 nov 2026 | Alineado con la plantilla común y con el contrato de Telemetría de Plantas (Equipo 2): `modo=paralelo`, puerto 8080, 429 por sobrecarga, IDs del Inventario, valores en minúscula, forma de la lectura del Equipo 2 y `resumenPorActivo` para el Equipo 6 |
+| 1.2 | 26 nov 2026 | Avance 1 implementado: despliegue concreto en EC2 (`t3.micro`, Ubuntu 24.04, Terraform) y en Floci 2.5.0 (EKS 1.33, IAM con enforcement). Detalle en [avance-1.md](avance-1.md) y [decisiones.md](decisiones.md) |
 
 ## 1. Responsabilidad del servicio
 
@@ -229,14 +230,14 @@ El benchmark compara tres versiones del mismo procesamiento sobre los mismos lot
 - Límites de memoria para la instancia de 1 GiB: `api` 384 MiB y `db` 256 MiB, ambos con `restart: unless-stopped`. PostgreSQL configurado liviano (`shared_buffers=32MB`, `max_connections=20`, `work_mem=2MB`) y swap de 1 GiB en la instancia.
 - `/health` para verificación; 429 por sobrecarga y 503 con la base de datos caída.
 - La URL de Telemetría se inyecta por variable de entorno, nunca en el código.
-- Instancia creada como código (Terraform o script de user-data) para que un tercero la reproduzca sin pasos manuales. Antes se verifica la fecha de creación y el plan de la cuenta AWS para elegir un tipo de instancia elegible.
+- Instancia creada como código con Terraform y user-data ([`deploy/iac/ec2/`](../deploy/iac/ec2)), para que un tercero la reproduzca con `terraform apply`. La cuenta tiene el plan gratuito nuevo de AWS (créditos). Se eligió `t3.micro` (x86_64, 1 GiB) entre los tipos elegibles, y el plan falla si el tipo no es elegible ([D14, D15](decisiones.md)).
 - Evidencia de memoria con `docker stats` y `free -m` durante la prueba de consumo.
 
 ### Componente A: Floci EKS
 
-- Clúster EKS emulado con Floci, creado como código, con un rol IAM de mínimo privilegio.
+- Clúster EKS emulado con Floci 2.5.0, creado con Terraform ([`deploy/iac/floci/`](../deploy/iac/floci)). El rol del clúster solo lleva `AmazonEKSClusterPolicy` y la confianza se limita a `eks.amazonaws.com` de la cuenta. Un usuario operador solo puede hacer `eks:DescribeCluster`. Con el enforcement de IAM activado, Floci rechaza lo demás ([D18, D19](decisiones.md)).
 - Manifiestos: Deployment con 2 réplicas (sondas de liveness y readiness sobre `/health`, `requests` y `limits` de memoria), Service, ConfigMap (umbrales, número de workers, URL de Telemetría) y Secret (credenciales de la base de datos).
-- Demostración con `kubectl get pods,svc` y peticiones contra el Service.
+- Demostración con `kubectl get pods,svc` y peticiones contra el Service (`kubectl port-forward`). Las migraciones usan un advisory lock para que las 2 réplicas arranquen a la vez sin conflicto ([D6](decisiones.md)).
 
 ### Operación y hoja de coordinación
 
