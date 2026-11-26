@@ -9,8 +9,8 @@ services:
     user: root
     ports:
       - "4566:4566"
-      # API server de los clústeres EKS (k3s) publicados en el host.
-      - "6500-6599:6500-6599"
+    # No publique aquí 6500-6599: Floci arranca cada k3s como contenedor hermano y le
+    # asigna un puerto libre de ese rango en el host.
     environment:
       FLOCI_STORAGE_MODE: persistent
       # Evalúa las políticas IAM en las llamadas: así el mínimo privilegio se comprueba de verdad.
