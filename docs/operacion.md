@@ -1,0 +1,113 @@
+# Operación del servicio
+
+Guía para el equipo: cómo actualizar, revisar y apagar los despliegues. La instalación inicial está en el [README](../README.md).
+
+## Credenciales y archivos locales
+
+La cuenta AWS del curso usa el perfil `infraestructuras`, región `us-east-2`.
+
+```bash
+aws login --profile infraestructuras
+export AWS_PROFILE=infraestructuras
+```
+
+Estos archivos no están en git y solo los tiene quien hizo el `apply`. Guárdelos en un lugar seguro:
+
+| Archivo | Para qué | Si se pierde |
+| --- | --- | --- |
+| `deploy/iac/ec2/terraform.tfstate` | Terraform sabe qué recursos administra | No se puede modificar ni destruir la instancia con Terraform. Hay que importarlos o borrarlos desde la consola |
+| `deploy/iac/ec2/voltrix-alertas.pem` | SSH a la instancia | Sin acceso SSH. Otro `apply` crea una clave nueva y reemplaza la instancia |
+| `.env` (en la instancia, `/opt/voltrix-alertas/.env`) | Clave de PostgreSQL generada al arrancar | Se puede regenerar, pero los datos usan la clave original |
+
+## EC2
+
+### Entrar a la instancia
+
+```bash
+cd deploy/iac/ec2
+ssh -i voltrix-alertas.pem ubuntu@$(terraform output -raw ip_publica)
+cd /opt/voltrix-alertas
+C="sudo docker compose --env-file .env -f deploy/compose/docker-compose.yml"
+```
+
+Si SSH da *timeout*, la IP desde la que se conecta no está en `ssh_cidr` (ver [red de la universidad](#red-de-la-universidad)).
+
+### Desplegar una versión nueva de `main`
+
+En la instancia:
+
+```bash
+sudo git pull --ff-only
+$C up -d --build --wait
+curl -s localhost:8080/health
+```
+
+Si no hay acceso SSH, `terraform apply -replace=aws_instance.api` crea una instancia nueva que clona `main`. La IP cambia, salvo que haya una Elastic IP.
+
+### Revisar estado y logs
+
+```bash
+$C ps
+$C logs -f api                       # una línea JSON por petición
+$C logs api | grep equipo-6          # consumo de un equipo concreto
+sudo docker stats --no-stream
+free -m
+sudo tail -50 /var/log/voltrix-user-data.log
+```
+
+Sin SSH, la salida del arranque se ve con:
+
+```bash
+ID=$(aws ec2 describe-instances --filters Name=tag:Name,Values=voltrix-alertas Name=instance-state-name,Values=running \
+      --query "Reservations[].Instances[].InstanceId" --output text)
+aws ec2 get-console-output --instance-id "$ID" --latest --output text
+```
+
+### Detener, encender o destruir
+
+| Acción | Comando | Efecto en costo e IP |
+| --- | --- | --- |
+| Detener | `aws ec2 stop-instances --instance-ids <id>` | Deja de cobrar la instancia; sigue cobrando el disco (~0,6 USD/mes). **La IP cambia** al encender |
+| Encender | `aws ec2 start-instances --instance-ids <id>` | El compose arranca solo (`restart: unless-stopped`). Actualice la hoja con la IP nueva |
+| Destruir | `terraform destroy` | Borra todo. La base de datos solo tiene datos de ejemplo |
+
+Costo con la instancia encendida 24/7: ~11–12 USD/mes del crédito del plan gratuito (vence el 10 may 2027). Créditos restantes:
+
+```bash
+aws freetier get-account-plan-state --region us-east-1 --query accountPlanRemainingCredits
+```
+
+## Floci EKS
+
+```bash
+deploy/iac/floci/desplegar.sh                 # crear o actualizar (idempotente)
+deploy/iac/floci/desplegar.sh destruir        # borrar el clúster
+docker compose -f deploy/iac/floci/docker-compose.yml down   # apagar Floci
+```
+
+Para usar kubectl en otra terminal, el script imprime las variables necesarias (kubeconfig y credenciales del usuario operador).
+
+Problemas conocidos:
+
+- **`No free port available in range 6500-6599`**: algo ocupa esos puertos en el host. Floci publica ahí el API server de cada k3s; no los mapee en su `docker-compose.yml`.
+- **`ResourceInUseException: Cluster already exists` justo después de borrar**: Floci tarda unos segundos en liberar el nombre. Espere y vuelva a aplicar.
+- **Docker no crea redes (`veth … operation not supported`)**: el kernel se actualizó y no se ha reiniciado. Reinicie el equipo.
+- **Pods en `ErrImageNeverPull` o `ImagePullBackOff` de `voltrix-alertas`**: falta importar la imagen al nodo. El paso 4 del script lo hace.
+
+## Red de la universidad
+
+- **HTTP a la IP de EC2 da `403` con una página de Fortinet/OITEL.** El filtro bloquea las URLs sin categoría ("Unrated"), y `http://<ip>:8080` es una. No es un fallo del servicio. Pruebe desde otra red, como los datos del celular o la casa, o use un dominio (pendiente).
+- **SSH da *timeout*.** La IP de salida del campus cambia dentro de `45.5.164.0/22` (se vieron `45.5.165.19` y `45.5.167.167`). Use `-var ssh_cidr=45.5.164.0/22` o abra SSH desde su IP de casa con `/32`.
+- **Equipos que consumen desde el campus** se encontrarán el mismo bloqueo. Avíseles en la hoja o en la pestaña "Integraciones".
+
+## Hoja Coordinacion_Voltrix
+
+Actualizar la fila del Equipo 3 cada vez que cambie la IP:
+
+| Columna | Valor |
+| --- | --- |
+| URL base | `terraform output -raw url_base` |
+| URL de `/health` | `terraform output -raw url_health` |
+| URL del contrato | Página Redoc del repo o `terraform output -raw url_openapi` |
+| Servicios que consume | Equipo 2, Telemetría de Plantas |
+| Fecha de actualización y contacto | Andrés Gerardo González Rosero |

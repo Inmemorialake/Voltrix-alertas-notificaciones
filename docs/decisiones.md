@@ -1,0 +1,28 @@
+# Decisiones técnicas
+
+Registro breve de decisiones tomadas al implementar, con su motivo. Complementa el [diseño](diseno.md): si alguna contradice el contrato, manda [`openapi.yaml`](../openapi.yaml).
+
+| # | Decisión | Motivo | Alternativa descartada |
+| --- | --- | --- | --- |
+| D1 | El contrato que se sirve es `openapi.yaml` tal cual; se desactiva el OpenAPI que FastAPI genera (`/docs`, `/openapi.json`) | Una sola fuente de verdad. El generado diferiría del contrato común | Mantener ambos y arriesgar que los consumidores lean el equivocado |
+| D2 | Validación cruzada de `SolicitudEvaluacion` (`lecturas` frente a `plantaId`, `desde` < `hasta`) en el endpoint y no en Pydantic | Así `detalles[].campo` señala el campo concreto (`lecturas`, `hasta`), como en el ejemplo del contrato | `model_validator`, que reporta el error sobre el cuerpo completo |
+| D3 | Los 422 de FastAPI se convierten en 400 `SOLICITUD_INVALIDA`, con mensajes en español y `campo` legible (`lecturas[0].valor`) | El contrato común solo define 400 para solicitudes inválidas | Dejar el 422 por defecto |
+| D4 | El límite de concurrencia es un contador en el middleware, sin lock | El middleware corre en el event loop, que es un solo hilo, así que no hay carrera. `/health` y `/openapi.yaml` no cuentan, para que las sondas no fallen bajo carga | Un semáforo, más complejo sin necesidad |
+| D5 | `X-Request-Id` se genera siempre y no se reutiliza el que mande el cliente | Es lo que pide el contrato y evita IDs duplicados o manipulados en los logs | Propagar el del cliente |
+| D6 | Migraciones SQL propias, aplicadas al arrancar bajo `pg_advisory_lock` | Dos réplicas pueden arrancar a la vez sin aplicar dos veces (verificado en Floci). No requiere una herramienta extra | Alembic (pesado para dos tablas) o un `init.sql` de Postgres (no sirve en k8s ni con la base ya creada) |
+| D7 | La semilla usa `ON CONFLICT DO NOTHING` sin destino | Tampoco falla si choca con el índice único parcial | `ON CONFLICT (id)`, que fallaría con otra alerta activa de la misma clave |
+| D8 | Las consultas de `/alertas/estado` corren en una transacción `REPEATABLE READ, READ ONLY` | Totales, resumen y página salen de la misma instantánea y son coherentes entre sí | Cuatro consultas independientes |
+| D9 | `totalActivas`, `porSeveridad` y `resumenPorActivo` solo aplican los filtros de planta y activo; `total` y `datos` aplican todos | Así lo describe el contrato: el resumen es de todas las alertas activas del activo, sin paginar | Aplicar `severidad` y `estado` también al resumen |
+| D10 | Avance 1: `POST /alertas` no persiste y `modo=paralelo` delega en la evaluación secuencial | La persistencia con `ON CONFLICT` la hace el despachador del núcleo concurrente (Avance 2). Así el contrato responde desde ya con datos coherentes | Persistir ya, sin control de concurrencia, y luego rehacerlo |
+| D11 | Umbrales en código, con los mismos valores que la tabla `umbral` | Basta para el esqueleto. Leerlos de la base de datos o del ConfigMap llega con el núcleo concurrente | Cargarlos ya desde el ConfigMap |
+| D12 | `WORKERS` son workers de evaluación, no procesos de Uvicorn. Uvicorn corre en un solo proceso | Se escala con réplicas, y el límite de concurrencia y los locks (Avance 2) son por proceso | Varios procesos de Uvicorn, que repartirían el límite y los locks |
+| D13 | EC2 con Ubuntu 24.04 | Sus repositorios traen `docker.io`, `docker-compose-v2` y `docker-buildx`. Amazon Linux 2023 no trae Compose ni buildx empaquetados | Amazon Linux 2023 descargando binarios |
+| D14 | `t3.micro` (x86_64, 1 GiB) | Elegible en el plan gratuito nuevo de la cuenta y coincide con el presupuesto de 1 GiB del diseño. La imagen se construye en la misma arquitectura que en local | `t4g.micro` (arm64, apenas más barata) y `t3.small` (2 GiB, el doble de costo) |
+| D15 | El Terraform de EC2 falla en el plan si el tipo no es `free_tier_eligible` | Protege el crédito si alguien cambia `instance_type` | Confiar en la revisión manual |
+| D16 | La clave de PostgreSQL se genera en la instancia (`openssl rand`) | No pasa por Terraform, el user-data ni git | Variable de Terraform, que quedaría en el estado y en el user-data |
+| D17 | Liveness tolerante (`failureThreshold: 6`) y readiness estricta, ambas sobre `/health` | Si la base de datos cae, la réplica sale del Service sin reiniciarse en bucle | Liveness estricta, que reiniciaría los pods por un fallo de la base de datos |
+| D18 | Floci con `FLOCI_SERVICES_IAM_ENFORCEMENT_ENABLED=true` | El mínimo privilegio se comprueba de verdad: el operador recibe `AccessDenied` fuera de `eks:DescribeCluster` | Dejarlo apagado (defecto), donde cualquier política "funciona" |
+| D19 | Rol del clúster con solo `AmazonEKSClusterPolicy` y `aws:SourceAccount` en la confianza; usuario operador con solo `eks:DescribeCluster` sobre ese clúster | Mínimo privilegio y protección de *confused deputy*. Floci no acepta `test/test` en `eks get-token`, por eso hace falta una identidad propia | Usar las credenciales raíz de Floci |
+| D20 | La imagen se importa al nodo k3s con `ctr images import` y `imagePullPolicy: IfNotPresent` | Lo más simple en local. El ECR de Floci también sirve y queda como opción | Publicar en un registro externo |
+| D21 | Sin nodegroup en Floci | En Floci los nodegroups son solo metadatos y k3s ya trae un nodo | Crear un nodegroup que no agrega nodos |
+| D22 | Cloudflare, si se adopta, en modo DNS-only | Conserva la IP real del cliente en los logs y simplifica depurar integraciones | Proxy naranja, que también admite el 8080 |
