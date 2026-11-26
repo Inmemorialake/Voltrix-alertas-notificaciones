@@ -90,20 +90,7 @@ Ejemplo de log, una línea JSON por petición:
 | Operador: `aws iam list-roles` | `AccessDenied` |
 | Operador: `aws eks delete-cluster` | `AccessDeniedException` |
 
-## 4. Capturas para la entrega
-
-Tomarlas fuera de la red de la universidad, o desde el campus a través del túnel SOCKS por la instancia, porque el Fortinet bloquea la IP y el dominio, que aún no tiene categoría (ver [operacion.md](operacion.md#red-de-la-universidad)).
-
-- [ ] Navegador o `curl -i` a `http://voltrix-alertas.inmemorialake.dev:8080/health` mostrando `X-Request-Id`
-- [ ] `curl` a `/alertas/estado` y a `POST /alertas` contra EC2
-- [ ] Un 400 contra EC2
-- [ ] En la instancia: `docker compose ps`, `docker stats --no-stream`, `free -m`
-- [ ] En la instancia: 503 de `/health` con `db` detenida y recuperación
-- [ ] `VOLTRIX_BASE_URL=http://voltrix-alertas.inmemorialake.dev:8080 pytest` en verde
-- [ ] Floci: `kubectl get nodes` y `kubectl -n voltrix-alertas get deploy,pods,svc`
-- [ ] Fila actualizada en la hoja Coordinacion_Voltrix
-
-## 5. Pendientes
+## 4. Pendientes
 
 | Pendiente | Para | Nota |
 | --- | --- | --- |

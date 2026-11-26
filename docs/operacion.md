@@ -97,7 +97,7 @@ Problemas conocidos:
 ## Red de la universidad
 
 - **HTTP a la IP o al dominio da `403` con una página de Fortinet/OITEL.** El filtro bloquea las URLs sin categoría ("Unrated"): la IP y también `voltrix-alertas.inmemorialake.dev`, que es nuevo. No es un fallo del servicio. Pruebe desde otra red, como los datos del celular o la casa. Para desbloquear el dominio en el campus, use el enlace "por favor siga este enlace" de la página de bloqueo (re-evaluación de Fortinet) y pida una categoría como *Information Technology*.
-- **Probar o tomar capturas desde el campus: túnel SOCKS por la instancia.** SSH sí sale del campus, así que el tráfico puede salir a internet desde AWS:
+- **Probar desde el campus: túnel SOCKS por la instancia.** SSH sí sale del campus, así que el tráfico puede salir a internet desde AWS:
 
   ```bash
   ssh -i deploy/iac/ec2/voltrix-alertas.pem -f -N -D 1080 ubuntu@3.151.244.68

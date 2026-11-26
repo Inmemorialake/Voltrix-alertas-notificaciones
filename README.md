@@ -35,11 +35,10 @@ Contrato completo: [`openapi.yaml`](openapi.yaml) (OpenAPI 3.0.3, también en [`
 
 ## Documentación
 
-- [Diseño de la solución](docs/diseno.md): arquitectura, modelo de datos, concurrencia y benchmark.
-- [Avance 1](docs/avance-1.md): qué se entregó, evidencia medida y lista de capturas.
+- [Diseño de la solución](docs/diseno.md): arquitectura, modelo de datos, concurrencia y benchmark. Es la única versión vigente; no se mantiene copia en Word.
+- [Avance 1](docs/avance-1.md): qué se entregó, evidencia medida y pendientes.
 - [Operación](docs/operacion.md): actualizar, revisar y apagar los despliegues; problemas conocidos.
 - [Decisiones técnicas](docs/decisiones.md): qué se decidió al implementar y por qué.
-- [Cheatsheet de la demo](docs/cheatsheet-demo.md): comandos de la presentación con túneles para la red de la universidad.
 - [Colección de Postman](postman/README.md): 16 peticiones con pruebas automáticas y entornos EC2, túnel y local.
 
 ## Stack
@@ -53,10 +52,11 @@ Python 3.12 · FastAPI · Uvicorn · `concurrent.futures` / `threading` · Postg
 ├── index.html          # Página Redoc (GitHub Pages)
 ├── openapi.yaml        # Contrato de la API
 ├── openapi.json        # Mismo contrato en JSON
-├── docs/               # Diseño y evidencia
+├── docs/               # Diseño, evidencia, operación y decisiones
+├── postman/            # Colección y entornos de Postman
 ├── app/                # Código del servicio (FastAPI) y migraciones SQL
 ├── tests/              # Pruebas que validan las respuestas contra openapi.yaml
-├── bench/              # Benchmark secuencial vs paralelo (Avance 2)
+├── bench/              # Benchmark secuencial vs paralelo (pendiente, Avance 2)
 ├── Dockerfile          # Imagen multi-stage, usuario no root
 ├── deploy/
 │   ├── compose/        # docker-compose para EC2 (api + db)
@@ -193,7 +193,7 @@ Supuestos sobre Floci, verificados al probar:
 
 ## Evidencia del Avance 1
 
-Resultados medidos y lista de capturas en [docs/avance-1.md](docs/avance-1.md). Comandos que demuestran cada punto (`B` es la URL base: `http://localhost:8080` en local o el output `url_base` de Terraform en EC2).
+Resultados medidos en [docs/avance-1.md](docs/avance-1.md). Comandos que demuestran cada punto (`B` es la URL base: `http://localhost:8080` en local o el output `url_base` de Terraform en EC2).
 
 ```bash
 B=http://voltrix-alertas.inmemorialake.dev:8080
@@ -251,7 +251,7 @@ aws iam list-roles   # con el operador: AccessDenied (mínimo privilegio)
 | Fecha | Entrega | Estado |
 | --- | --- | --- |
 | 19 nov 2026 | Diseño y contrato OpenAPI | Entregado |
-| 26 nov 2026 | Avance 1: esqueleto en EC2 y clúster en Floci EKS | Desplegado |
+| 26 nov 2026 | Avance 1: esqueleto en EC2 y clúster en Floci EKS | Entregado |
 | 3 dic 2026 | Avance 2: versiones secuencial y paralela, benchmark, 2 réplicas, consumo real | Pendiente |
 | 10 dic 2026 | Entrega final y sustentación | Pendiente |
 
