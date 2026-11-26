@@ -221,3 +221,11 @@ def test_sobrecarga_429_con_retry_after(contrato, validar):
             assert r.json()["codigo"] == "SOBRECARGA"
     # /health no cuenta contra el límite.
     assert salud.status_code == 200
+
+
+@pytest.mark.parametrize("ruta", ["/health", "/openapi.yaml"])
+def test_head_en_rutas_de_operacion(cliente, ruta):
+    resp = cliente.head(ruta)
+    assert resp.status_code == 200
+    assert resp.content == b""
+    uuid.UUID(resp.headers["X-Request-Id"])

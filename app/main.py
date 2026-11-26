@@ -188,7 +188,8 @@ def create_app(
         )
         return JSONResponse(_json(respuesta))
 
-    @app.get("/health")
+    # HEAD además de GET: lo usan monitores y `curl -I`.
+    @app.api_route("/health", methods=["GET", "HEAD"])
     def consultar_salud() -> JSONResponse:
         try:
             repo.ping()
@@ -204,7 +205,7 @@ def create_app(
         )
         return JSONResponse(_json(salud), status_code=200 if ok else 503)
 
-    @app.get("/openapi.yaml")
+    @app.api_route("/openapi.yaml", methods=["GET", "HEAD"])
     def obtener_contrato() -> Response:
         return Response(contrato, media_type="application/yaml")
 
