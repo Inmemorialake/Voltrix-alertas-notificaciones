@@ -107,16 +107,23 @@ Las pruebas validan cada respuesta contra [`openapi.yaml`](openapi.yaml) con `op
 
 ## Desplegar en EC2 (Componente B)
 
-Requisitos: Terraform ≥ 1.6 y credenciales de AWS (`aws login`). La instancia clona este repositorio público, así que despliega lo que esté en `main`.
+Requisitos: Terraform ≥ 1.6 y credenciales de AWS. La cuenta del equipo usa el perfil `infraestructuras` (`aws login --profile infraestructuras`, región `us-east-2`). La instancia clona este repositorio público, así que despliega lo que esté en `main`.
 
 ```bash
 cd deploy/iac/ec2
+export AWS_PROFILE=infraestructuras
 terraform init
-terraform apply                      # opcional: -var instance_type=... -var ssh_cidr=$(curl -s ifconfig.me)/32
+terraform plan -var ssh_cidr=45.5.164.0/22 -out=tfplan   # revise el plan antes de aplicar
+terraform apply tfplan
 terraform output                     # IP, url_base, url_health, url_openapi, ssh
 ```
 
-Terraform crea un par de claves SSH (guardado en `deploy/iac/ec2/voltrix-alertas.pem`, ignorado por git) y un security group que solo abre los puertos 22 y 8080. Crea una instancia Ubuntu 24.04 con IMDSv2 y un disco gp3 cifrado de 8 GiB. Antes de crear nada, el plan falla si el tipo de instancia no es elegible para la capa gratuita de la cuenta.
+Terraform crea:
+- un par de claves SSH (la privada se guarda en `deploy/iac/ec2/voltrix-alertas.pem`, ignorado por git);
+- un security group que solo abre los puertos 22 y 8080;
+- una instancia Ubuntu 24.04 con IMDSv2 y disco gp3 cifrado de 8 GiB.
+
+El plan falla antes de crear nada si el tipo de instancia no es elegible para la capa gratuita de la cuenta.
 
 El [user-data](deploy/iac/ec2/user-data.sh.tftpl) hace todo lo demás:
 - crea 1 GiB de swap;
@@ -124,7 +131,29 @@ El [user-data](deploy/iac/ec2/user-data.sh.tftpl) hace todo lo demás:
 - clona el repo y genera `.env` con una clave aleatoria de PostgreSQL;
 - levanta el compose y espera a `/health`.
 
-Tarda unos 3 a 5 minutos; el registro queda en `/var/log/voltrix-user-data.log`. Para eliminar todo: `terraform destroy`.
+Tarda unos 2 minutos; el registro queda en `/var/log/voltrix-user-data.log` y en la salida de consola (`aws ec2 get-console-output --instance-id <id> --latest`). Para eliminar todo: `terraform destroy`.
+
+Notas de operación:
+
+- **Costo.** La cuenta tiene el plan gratuito nuevo de AWS (créditos, vence el 10 may 2027). Una `t3.micro` encendida 24/7 consume unos 11–12 USD/mes del crédito: instancia ~7,6, IPv4 pública ~3,6 y EBS ~0,6.
+- **La IP no es fija.** Se conserva al reiniciar, pero cambia si la instancia se detiene y arranca. Si cambia, actualice la hoja Coordinacion_Voltrix con el nuevo `terraform output url_base`.
+- **El estado de Terraform es local** (`terraform.tfstate`, ignorado por git) y está en el equipo de quien hizo el `apply`. Sin ese archivo, otro integrante no puede modificar ni destruir la instancia con Terraform.
+- **Red de la universidad.** El filtro Fortinet de OITEL responde `403` a las URLs sin categoría ("Unrated"), como `http://<ip>:8080`. Pruebe desde otra red, por ejemplo los datos del celular. La IP de salida del campus cambia dentro de `45.5.164.0/22`, por eso `ssh_cidr` usa ese rango y no una sola IP.
+
+### Despliegue vigente
+
+| Campo | Valor |
+| --- | --- |
+| Instancia | `i-00c45cd7c9644c74b`, `t3.micro` (x86_64, 1 GiB), `us-east-2` |
+| URL base | <http://18.222.99.242:8080> |
+| `/health` | <http://18.222.99.242:8080/health> |
+| Contrato | <http://18.222.99.242:8080/openapi.yaml> |
+| Desplegado | 26 nov 2026; `/health` respondió `disponible` a los 100 s del arranque |
+
+### Pendientes del despliegue
+
+- **Elastic IP**, para que la URL de la hoja no cambie. Cuesta lo mismo que la IP actual mientras esté asociada.
+- **Subdominio en Cloudflare** (`alertas.<dominio>`, registro DNS-only), creado con Terraform y opcional por variable. También podría evitar el bloqueo "Unrated" del Fortinet, aunque no está garantizado.
 
 ## Crear el clúster en Floci EKS (Componente A)
 
@@ -160,7 +189,7 @@ Supuestos sobre Floci, verificados al probar:
 Comandos que demuestran cada punto. `B` es la URL base: `http://localhost:8080` en local o el output `url_base` de Terraform en EC2.
 
 ```bash
-B=http://<ip-ec2>:8080
+B=http://18.222.99.242:8080
 
 # Salud y contrato (X-Request-Id en toda respuesta)
 curl -i $B/health
@@ -221,7 +250,7 @@ Resultados de la verificación local del 26 nov 2026:
 | Fecha | Entrega | Estado |
 | --- | --- | --- |
 | 19 nov 2026 | Diseño y contrato OpenAPI | Entregado |
-| 26 nov 2026 | Avance 1: esqueleto en EC2 y clúster en Floci EKS | Pendiente |
+| 26 nov 2026 | Avance 1: esqueleto en EC2 y clúster en Floci EKS | Desplegado |
 | 3 dic 2026 | Avance 2: versiones secuencial y paralela, benchmark, 2 réplicas, consumo real | Pendiente |
 | 10 dic 2026 | Entrega final y sustentación | Pendiente |
 
