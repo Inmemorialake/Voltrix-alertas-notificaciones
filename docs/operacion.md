@@ -97,6 +97,16 @@ Problemas conocidos:
 ## Red de la universidad
 
 - **HTTP a la IP o al dominio da `403` con una página de Fortinet/OITEL.** El filtro bloquea las URLs sin categoría ("Unrated"): la IP y también `voltrix-alertas.inmemorialake.dev`, que es nuevo. No es un fallo del servicio. Pruebe desde otra red, como los datos del celular o la casa. Para desbloquear el dominio en el campus, use el enlace "por favor siga este enlace" de la página de bloqueo (re-evaluación de Fortinet) y pida una categoría como *Information Technology*.
+- **Probar o tomar capturas desde el campus: túnel SOCKS por la instancia.** SSH sí sale del campus, así que el tráfico puede salir a internet desde AWS:
+
+  ```bash
+  ssh -i deploy/iac/ec2/voltrix-alertas.pem -f -N -D 1080 ubuntu@3.151.244.68
+  curl -i --socks5-hostname localhost:1080 http://voltrix-alertas.inmemorialake.dev:8080/health
+  ALL_PROXY=socks5h://localhost:1080 VOLTRIX_BASE_URL=http://voltrix-alertas.inmemorialake.dev:8080 .venv/bin/pytest
+  chromium --proxy-server="socks5://localhost:1080" --user-data-dir=/tmp/chrome-voltrix   # navegador por el túnel
+  ```
+
+  En Firefox: *Ajustes → Configuración de red → Proxy manual → SOCKS v5 `localhost` puerto `1080`*, y marque "DNS por proxy". Para cerrar el túnel: `pkill -f "ssh.*-D 1080"`.
 - **SSH da *timeout*.** La IP de salida del campus cambia dentro de `45.5.164.0/22` (se vieron `45.5.165.19` y `45.5.167.167`). `terraform.tfvars` (copiado de `example.tfvars`) ya usa ese rango. Para entrar desde la casa, agregue su IP con `/32`.
 - **Equipos que consumen desde el campus** se encontrarán el mismo bloqueo. Avíseles en la hoja o en la pestaña "Integraciones".
 

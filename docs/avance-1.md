@@ -73,6 +73,7 @@ Ejemplo de log, una línea JSON por petición:
 | `terraform plan` | 8 recursos; SSH limitado a un rango, 8080 abierto; precondición de capa gratuita aprobada |
 | `terraform apply` | Instancia creada en 14 s |
 | Salida de consola (cloud-init) | Compose *healthy* y `/health` → `disponible` a los 100 s del arranque |
+| `pytest` contra el dominio público (túnel SOCKS) | 40 aprobadas, 3 omitidas (solo en proceso) |
 | DNS `voltrix-alertas.inmemorialake.dev` | Resuelve a `3.151.244.68`; desde internet `/health` → 200 con `X-Request-Id` y `/openapi.yaml` → `application/yaml` |
 | Elastic IP y `ssh_cidr` del campus | 1 recurso nuevo y 1 cambio, sin reemplazar la instancia; SSH funciona desde el campus |
 | En la instancia | `free -m`: 909 MiB de RAM + 1023 MiB de swap; `docker stats`: api 51 MiB / 384 MiB, db 37 MiB / 256 MiB |
@@ -91,7 +92,7 @@ Ejemplo de log, una línea JSON por petición:
 
 ## 4. Capturas para la entrega
 
-Tomarlas **desde fuera de la red de la universidad**, por ejemplo con los datos del celular, porque el Fortinet bloquea las URLs que son solo una IP (ver [operacion.md](operacion.md#red-de-la-universidad)).
+Tomarlas fuera de la red de la universidad, o desde el campus a través del túnel SOCKS por la instancia, porque el Fortinet bloquea la IP y el dominio, que aún no tiene categoría (ver [operacion.md](operacion.md#red-de-la-universidad)).
 
 - [ ] Navegador o `curl -i` a `http://voltrix-alertas.inmemorialake.dev:8080/health` mostrando `X-Request-Id`
 - [ ] `curl` a `/alertas/estado` y a `POST /alertas` contra EC2
