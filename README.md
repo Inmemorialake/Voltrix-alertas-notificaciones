@@ -22,7 +22,7 @@ flowchart LR
 
 ## API
 
-Documentación navegable (Redoc): <https://inmemorialake.github.io/voltrix-alertas-notificaciones/> y, desde el propio servicio, <http://voltrix-alertas.inmemorialake.dev:8080/docs>
+Documentación navegable (Redoc): <https://inmemorialake.github.io/Voltrix-alertas-notificaciones/> y, desde el propio servicio, <http://voltrix-alertas.inmemorialake.dev:8080/docs>
 
 Contrato completo: [`openapi.yaml`](openapi.yaml) (OpenAPI 3.0.3, también en [`openapi.json`](openapi.json)). Sigue la plantilla común de Voltrix Energy (Equipo 1) registrada en la hoja Coordinacion_Voltrix.
 
@@ -70,7 +70,7 @@ Python 3.12 · FastAPI · Uvicorn · `concurrent.futures` / `threading` · Postg
 
 ## Publicar la documentación
 
-En GitHub: *Settings → Pages → Build and deployment → Deploy from a branch*, rama `main`, carpeta `/ (root)`. La página queda en `https://<usuario>.github.io/voltrix-alertas-notificaciones/` y lee `openapi.yaml` del mismo repo.
+GitHub Pages está activado desde la rama `main`, carpeta raíz (*Settings → Pages → Deploy from a branch*). Cada push a `main` publica [`index.html`](index.html), que lee `openapi.yaml` del mismo repo, en <https://inmemorialake.github.io/Voltrix-alertas-notificaciones/>. La ruta distingue mayúsculas: con `voltrix` en minúscula da 404.
 
 ## Cómo ejecutar en local
 
