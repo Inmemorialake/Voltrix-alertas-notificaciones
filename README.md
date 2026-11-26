@@ -39,6 +39,7 @@ Contrato completo: [`openapi.yaml`](openapi.yaml) (OpenAPI 3.0.3, también en [`
 - [Avance 1](docs/avance-1.md): qué se entregó, evidencia medida y lista de capturas.
 - [Operación](docs/operacion.md): actualizar, revisar y apagar los despliegues; problemas conocidos.
 - [Decisiones técnicas](docs/decisiones.md): qué se decidió al implementar y por qué.
+- [Colección de Postman](postman/README.md): 16 peticiones con pruebas automáticas y entornos EC2, túnel y local.
 
 ## Stack
 

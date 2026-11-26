@@ -1,0 +1,879 @@
+{
+  "info": {
+    "_postman_id": "1829dc50-8741-5f1b-8ba9-dd68fb6d9d2e",
+    "name": "Voltrix · Alertas y Notificaciones (Equipo 3)",
+    "description": "Peticiones del contrato `openapi.yaml` con pruebas automáticas. Elija un entorno (EC2, EC2 por túnel SSH o Local) y ejecute la colección con *Run*. Guía en `postman/README.md`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Operación",
+      "item": [
+        {
+          "name": "GET /health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"X-Request-Id es un uuid\", () => {",
+                  "  pm.expect(pm.response.headers.get(\"X-Request-Id\")).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);",
+                  "});",
+                  "pm.test(\"Responde en menos de 2 s\", () => pm.expect(pm.response.responseTime).to.be.below(2000));",
+                  "",
+                  "pm.test(\"200 disponible\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const s = pm.response.json();",
+                  "  pm.expect(s.estado).to.eql(\"disponible\");",
+                  "  pm.expect(s.baseDatos).to.eql(\"ok\");",
+                  "  pm.expect(s).to.have.property(\"tiempoActivoSeg\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Salud del servicio y de su base de datos (esquema común `Salud`)."
+          }
+        },
+        {
+          "name": "GET /openapi.yaml",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"X-Request-Id es un uuid\", () => {",
+                  "  pm.expect(pm.response.headers.get(\"X-Request-Id\")).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);",
+                  "});",
+                  "pm.test(\"Responde en menos de 2 s\", () => pm.expect(pm.response.responseTime).to.be.below(2000));",
+                  "",
+                  "pm.test(\"200 application/yaml\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/yaml\");",
+                  "  pm.expect(pm.response.text()).to.include(\"openapi: 3.0.3\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/openapi.yaml",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "openapi.yaml"
+              ]
+            },
+            "description": "Contrato servido tal cual."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Estado de alertas",
+      "item": [
+        {
+          "name": "Estado vigente (Equipo 6)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"X-Request-Id es un uuid\", () => {",
+                  "  pm.expect(pm.response.headers.get(\"X-Request-Id\")).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);",
+                  "});",
+                  "pm.test(\"Responde en menos de 2 s\", () => pm.expect(pm.response.responseTime).to.be.below(2000));",
+                  "",
+                  "const d = pm.response.json();",
+                  "pm.test(\"200 con forma EstadoAlertas\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(d).to.include.keys(\"generadoEn\",\"totalActivas\",\"porSeveridad\",\"resumenPorActivo\",\"datos\",\"total\",\"limit\",\"offset\");",
+                  "});",
+                  "pm.test(\"Solo alertas activas\", () => d.datos.forEach(a => pm.expect(a.estado).to.eql(\"activa\")));",
+                  "pm.test(\"totalActivas = advertencia + critica\", () => pm.expect(d.totalActivas).to.eql(d.porSeveridad.advertencia + d.porSeveridad.critica));",
+                  "pm.test(\"resumenPorActivo trae activas y criticas\", () => d.resumenPorActivo.forEach(r => pm.expect(r).to.have.all.keys(\"plantaId\",\"activoId\",\"activas\",\"criticas\")));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Equipo-Consumidor",
+                "value": "{{equipoConsumidor}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/alertas/estado",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alertas",
+                "estado"
+              ]
+            },
+            "description": "Lo que consume Mantenimiento Predictivo: solo activas, con `porSeveridad` y `resumenPorActivo`."
+          }
+        },
+        {
+          "name": "Filtrar por planta PL-041",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"X-Request-Id es un uuid\", () => {",
+                  "  pm.expect(pm.response.headers.get(\"X-Request-Id\")).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);",
+                  "});",
+                  "pm.test(\"Responde en menos de 2 s\", () => pm.expect(pm.response.responseTime).to.be.below(2000));",
+                  "",
+                  "pm.test(\"Solo PL-041\", () => pm.response.json().datos.forEach(a => pm.expect(a.plantaId).to.eql(\"PL-041\")));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Equipo-Consumidor",
+                "value": "{{equipoConsumidor}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/alertas/estado?plantaId=PL-041",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alertas",
+                "estado"
+              ],
+              "query": [
+                {
+                  "key": "plantaId",
+                  "value": "PL-041"
+                }
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Filtrar por severidad crítica",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"X-Request-Id es un uuid\", () => {",
+                  "  pm.expect(pm.response.headers.get(\"X-Request-Id\")).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);",
+                  "});",
+                  "pm.test(\"Responde en menos de 2 s\", () => pm.expect(pm.response.responseTime).to.be.below(2000));",
+                  "",
+                  "pm.test(\"Solo críticas\", () => pm.response.json().datos.forEach(a => pm.expect(a.severidad).to.eql(\"critica\")));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Equipo-Consumidor",
+                "value": "{{equipoConsumidor}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/alertas/estado?severidad=critica",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alertas",
+                "estado"
+              ],
+              "query": [
+                {
+                  "key": "severidad",
+                  "value": "critica"
+                }
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Historial de un activo (estado=todas)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"X-Request-Id es un uuid\", () => {",
+                  "  pm.expect(pm.response.headers.get(\"X-Request-Id\")).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);",
+                  "});",
+                  "pm.test(\"Responde en menos de 2 s\", () => pm.expect(pm.response.responseTime).to.be.below(2000));",
+                  "",
+                  "const d = pm.response.json();",
+                  "pm.test(\"Incluye activas y resueltas\", () => {",
+                  "  const estados = new Set(d.datos.map(a => a.estado));",
+                  "  pm.expect([...estados]).to.include(\"resuelta\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Equipo-Consumidor",
+                "value": "{{equipoConsumidor}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/alertas/estado?activoId=PL-002-BB-01&estado=todas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alertas",
+                "estado"
+              ],
+              "query": [
+                {
+                  "key": "activoId",
+                  "value": "PL-002-BB-01"
+                },
+                {
+                  "key": "estado",
+                  "value": "todas"
+                }
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Paginación (limit=2, offset=2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"X-Request-Id es un uuid\", () => {",
+                  "  pm.expect(pm.response.headers.get(\"X-Request-Id\")).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);",
+                  "});",
+                  "pm.test(\"Responde en menos de 2 s\", () => pm.expect(pm.response.responseTime).to.be.below(2000));",
+                  "",
+                  "const d = pm.response.json();",
+                  "pm.test(\"Página de 2 y total sin paginar\", () => {",
+                  "  pm.expect(d.datos.length).to.be.at.most(2);",
+                  "  pm.expect(d.limit).to.eql(2);",
+                  "  pm.expect(d.offset).to.eql(2);",
+                  "  pm.expect(d.total).to.be.at.least(d.datos.length);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Equipo-Consumidor",
+                "value": "{{equipoConsumidor}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/alertas/estado?estado=todas&limit=2&offset=2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alertas",
+                "estado"
+              ],
+              "query": [
+                {
+                  "key": "estado",
+                  "value": "todas"
+                },
+                {
+                  "key": "limit",
+                  "value": "2"
+                },
+                {
+                  "key": "offset",
+                  "value": "2"
+                }
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Evaluar lotes",
+      "item": [
+        {
+          "name": "Lote: sobrecalentamiento de batería (crítica)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"X-Request-Id es un uuid\", () => {",
+                  "  pm.expect(pm.response.headers.get(\"X-Request-Id\")).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);",
+                  "});",
+                  "pm.test(\"Responde en menos de 2 s\", () => pm.expect(pm.response.responseTime).to.be.below(2000));",
+                  "",
+                  "const r = pm.response.json();",
+                  "pm.test(\"200 con 1 alerta crítica\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(r.alertasNuevas).to.eql(1);",
+                  "  pm.expect(r.alertas[0]).to.include({activoId: \"PL-002-BB-01\", severidad: \"critica\", ocurrencias: 3, umbralAplicado: 45});",
+                  "});",
+                  "pm.test(\"MetricasProcesamiento\", () => pm.expect(r.metricas).to.include({modo: \"paralelo\", workers: 4, elementos: 3}));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Equipo-Consumidor",
+                "value": "{{equipoConsumidor}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/alertas?modo=paralelo&workers=4",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alertas"
+              ],
+              "query": [
+                {
+                  "key": "modo",
+                  "value": "paralelo"
+                },
+                {
+                  "key": "workers",
+                  "value": "4"
+                }
+              ]
+            },
+            "description": "3 lecturas sobre 45 °C del mismo banco: crea 1 alerta crítica con `ocurrencias: 3`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lecturas\": [\n    {\n      \"plantaId\": \"PL-002\",\n      \"activoId\": \"PL-002-BB-01\",\n      \"tipoActivo\": \"banco_baterias\",\n      \"fechaHora\": \"2026-11-25T13:05:00Z\",\n      \"metrica\": \"temperatura\",\n      \"valor\": 46.3,\n      \"unidad\": \"C\"\n    },\n    {\n      \"plantaId\": \"PL-002\",\n      \"activoId\": \"PL-002-BB-01\",\n      \"tipoActivo\": \"banco_baterias\",\n      \"fechaHora\": \"2026-11-25T13:05:10Z\",\n      \"metrica\": \"temperatura\",\n      \"valor\": 47.1,\n      \"unidad\": \"C\"\n    },\n    {\n      \"plantaId\": \"PL-002\",\n      \"activoId\": \"PL-002-BB-01\",\n      \"tipoActivo\": \"banco_baterias\",\n      \"fechaHora\": \"2026-11-25T13:05:20Z\",\n      \"metrica\": \"temperatura\",\n      \"valor\": 45.9,\n      \"unidad\": \"C\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Lote mixto: turbina y panel (secuencial)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"X-Request-Id es un uuid\", () => {",
+                  "  pm.expect(pm.response.headers.get(\"X-Request-Id\")).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);",
+                  "});",
+                  "pm.test(\"Responde en menos de 2 s\", () => pm.expect(pm.response.responseTime).to.be.below(2000));",
+                  "",
+                  "const r = pm.response.json();",
+                  "pm.test(\"200 con turbina crítica y caída de panel\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const porActivo = Object.fromEntries(r.alertas.map(a => [a.activoId + \"/\" + a.metrica, a]));",
+                  "  pm.expect(porActivo[\"PL-041-TB-03/velocidad_viento\"]).to.include({tipoActivo: \"turbina\", severidad: \"critica\"});",
+                  "  pm.expect(porActivo[\"PL-001-PS-07/caida_potencia\"]).to.include({tipoActivo: \"panel_solar\"});",
+                  "});",
+                  "pm.test(\"Secuencial usa 1 worker\", () => pm.expect(r.metricas).to.include({modo: \"secuencial\", workers: 1, elementos: 11}));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Equipo-Consumidor",
+                "value": "{{equipoConsumidor}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/alertas?modo=secuencial",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alertas"
+              ],
+              "query": [
+                {
+                  "key": "modo",
+                  "value": "secuencial"
+                }
+              ]
+            },
+            "description": "Turbina sin `tipoActivo` (se deduce de `TB`) con viento < 3 m/s, y panel cuya potencia cae ~48 % frente a su mediana.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lecturas\": [\n    {\n      \"plantaId\": \"PL-041\",\n      \"activoId\": \"PL-041-TB-03\",\n      \"fechaHora\": \"2026-11-25T13:05:00Z\",\n      \"metrica\": \"velocidad_viento\",\n      \"valor\": 2.1,\n      \"unidad\": \"m/s\"\n    },\n    {\n      \"plantaId\": \"PL-041\",\n      \"activoId\": \"PL-041-TB-03\",\n      \"fechaHora\": \"2026-11-25T13:05:10Z\",\n      \"metrica\": \"velocidad_viento\",\n      \"valor\": 1.5,\n      \"unidad\": \"m/s\"\n    },\n    {\n      \"plantaId\": \"PL-041\",\n      \"activoId\": \"PL-041-TB-03\",\n      \"fechaHora\": \"2026-11-25T13:05:20Z\",\n      \"metrica\": \"velocidad_viento\",\n      \"valor\": 2.8,\n      \"unidad\": \"m/s\"\n    },\n    {\n      \"plantaId\": \"PL-001\",\n      \"activoId\": \"PL-001-PS-07\",\n      \"tipoActivo\": \"panel_solar\",\n      \"fechaHora\": \"2026-11-25T13:05:00Z\",\n      \"metrica\": \"potencia\",\n      \"valor\": 1000,\n      \"unidad\": \"W\"\n    },\n    {\n      \"plantaId\": \"PL-001\",\n      \"activoId\": \"PL-001-PS-07\",\n      \"tipoActivo\": \"panel_solar\",\n      \"fechaHora\": \"2026-11-25T13:05:05Z\",\n      \"metrica\": \"potencia\",\n      \"valor\": 1010,\n      \"unidad\": \"W\"\n    },\n    {\n      \"plantaId\": \"PL-001\",\n      \"activoId\": \"PL-001-PS-07\",\n      \"tipoActivo\": \"panel_solar\",\n      \"fechaHora\": \"2026-11-25T13:05:10Z\",\n      \"metrica\": \"potencia\",\n      \"valor\": 990,\n      \"unidad\": \"W\"\n    },\n    {\n      \"plantaId\": \"PL-001\",\n      \"activoId\": \"PL-001-PS-07\",\n      \"tipoActivo\": \"panel_solar\",\n      \"fechaHora\": \"2026-11-25T13:05:15Z\",\n      \"metrica\": \"potencia\",\n      \"valor\": 1005,\n      \"unidad\": \"W\"\n    },\n    {\n      \"plantaId\": \"PL-001\",\n      \"activoId\": \"PL-001-PS-07\",\n      \"tipoActivo\": \"panel_solar\",\n      \"fechaHora\": \"2026-11-25T13:05:30Z\",\n      \"metrica\": \"potencia\",\n      \"valor\": 520,\n      \"unidad\": \"W\"\n    },\n    {\n      \"plantaId\": \"PL-001\",\n      \"activoId\": \"PL-001-PS-07\",\n      \"tipoActivo\": \"panel_solar\",\n      \"fechaHora\": \"2026-11-25T13:05:40Z\",\n      \"metrica\": \"potencia\",\n      \"valor\": 510,\n      \"unidad\": \"W\"\n    },\n    {\n      \"plantaId\": \"PL-001\",\n      \"activoId\": \"PL-001-PS-07\",\n      \"tipoActivo\": \"panel_solar\",\n      \"fechaHora\": \"2026-11-25T13:05:50Z\",\n      \"metrica\": \"potencia\",\n      \"valor\": 530,\n      \"unidad\": \"W\"\n    },\n    {\n      \"plantaId\": \"PL-002\",\n      \"activoId\": \"PL-002-BB-01\",\n      \"tipoActivo\": \"banco_baterias\",\n      \"fechaHora\": \"2026-11-25T13:05:30Z\",\n      \"metrica\": \"temperatura\",\n      \"valor\": 41.0,\n      \"unidad\": \"C\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Desde Telemetría (plantaId + ventana)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"X-Request-Id es un uuid\", () => {",
+                  "  pm.expect(pm.response.headers.get(\"X-Request-Id\")).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);",
+                  "});",
+                  "pm.test(\"Responde en menos de 2 s\", () => pm.expect(pm.response.responseTime).to.be.below(2000));",
+                  "",
+                  "pm.test(\"200 con lecturas evaluadas\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().lecturasEvaluadas).to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Equipo-Consumidor",
+                "value": "{{equipoConsumidor}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/alertas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alertas"
+              ]
+            },
+            "description": "Sin `TELEMETRIA_URL` el servicio usa lecturas de ejemplo; con ella, consulta al Equipo 2.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plantaId\": \"PL-002\",\n  \"desde\": \"2026-11-25T12:00:00Z\",\n  \"hasta\": \"2026-11-25T13:00:00Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Errores del contrato",
+      "item": [
+        {
+          "name": "400: lecturas y plantaId a la vez",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"X-Request-Id es un uuid\", () => {",
+                  "  pm.expect(pm.response.headers.get(\"X-Request-Id\")).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);",
+                  "});",
+                  "pm.test(\"Responde en menos de 2 s\", () => pm.expect(pm.response.responseTime).to.be.below(2000));",
+                  "",
+                  "const e = pm.response.json();",
+                  "pm.test(\"Esquema común Error\", () => {",
+                  "  [\"codigo\", \"mensaje\", \"requestId\"].forEach(k => pm.expect(e).to.have.property(k));",
+                  "  Object.keys(e).forEach(k => pm.expect([\"codigo\", \"mensaje\", \"requestId\", \"detalles\"]).to.include(k));",
+                  "  pm.expect(e.codigo).to.match(/^[A-Z_]+$/);",
+                  "  pm.expect(e.requestId).to.eql(pm.response.headers.get(\"X-Request-Id\"));",
+                  "});",
+                  "",
+                  "pm.test(\"400 SOLICITUD_INVALIDA en 'lecturas'\", () => {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(e.codigo).to.eql(\"SOLICITUD_INVALIDA\");",
+                  "  pm.expect(e.detalles.map(d => d.campo)).to.include(\"lecturas\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Equipo-Consumidor",
+                "value": "{{equipoConsumidor}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/alertas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alertas"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lecturas\": [\n    {\n      \"plantaId\": \"PL-002\",\n      \"activoId\": \"PL-002-BB-01\",\n      \"tipoActivo\": \"banco_baterias\",\n      \"fechaHora\": \"2026-11-25T13:05:00Z\",\n      \"metrica\": \"temperatura\",\n      \"valor\": 46.3,\n      \"unidad\": \"C\"\n    },\n    {\n      \"plantaId\": \"PL-002\",\n      \"activoId\": \"PL-002-BB-01\",\n      \"tipoActivo\": \"banco_baterias\",\n      \"fechaHora\": \"2026-11-25T13:05:10Z\",\n      \"metrica\": \"temperatura\",\n      \"valor\": 47.1,\n      \"unidad\": \"C\"\n    },\n    {\n      \"plantaId\": \"PL-002\",\n      \"activoId\": \"PL-002-BB-01\",\n      \"tipoActivo\": \"banco_baterias\",\n      \"fechaHora\": \"2026-11-25T13:05:20Z\",\n      \"metrica\": \"temperatura\",\n      \"valor\": 45.9,\n      \"unidad\": \"C\"\n    }\n  ],\n  \"plantaId\": \"PL-002\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "400: fecha sin zona horaria",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"X-Request-Id es un uuid\", () => {",
+                  "  pm.expect(pm.response.headers.get(\"X-Request-Id\")).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);",
+                  "});",
+                  "pm.test(\"Responde en menos de 2 s\", () => pm.expect(pm.response.responseTime).to.be.below(2000));",
+                  "",
+                  "const e = pm.response.json();",
+                  "pm.test(\"Esquema común Error\", () => {",
+                  "  [\"codigo\", \"mensaje\", \"requestId\"].forEach(k => pm.expect(e).to.have.property(k));",
+                  "  Object.keys(e).forEach(k => pm.expect([\"codigo\", \"mensaje\", \"requestId\", \"detalles\"]).to.include(k));",
+                  "  pm.expect(e.codigo).to.match(/^[A-Z_]+$/);",
+                  "  pm.expect(e.requestId).to.eql(pm.response.headers.get(\"X-Request-Id\"));",
+                  "});",
+                  "",
+                  "pm.test(\"400 en lecturas[0].fechaHora\", () => {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(e.detalles.map(d => d.campo)).to.include(\"lecturas[0].fechaHora\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Equipo-Consumidor",
+                "value": "{{equipoConsumidor}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/alertas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alertas"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lecturas\": [\n    {\n      \"plantaId\": \"PL-002\",\n      \"activoId\": \"PL-002-BB-01\",\n      \"tipoActivo\": \"banco_baterias\",\n      \"fechaHora\": \"2026-11-25T13:05:00\",\n      \"metrica\": \"temperatura\",\n      \"valor\": 46.3,\n      \"unidad\": \"C\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "400: JSON malformado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"X-Request-Id es un uuid\", () => {",
+                  "  pm.expect(pm.response.headers.get(\"X-Request-Id\")).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);",
+                  "});",
+                  "pm.test(\"Responde en menos de 2 s\", () => pm.expect(pm.response.responseTime).to.be.below(2000));",
+                  "",
+                  "const e = pm.response.json();",
+                  "pm.test(\"Esquema común Error\", () => {",
+                  "  [\"codigo\", \"mensaje\", \"requestId\"].forEach(k => pm.expect(e).to.have.property(k));",
+                  "  Object.keys(e).forEach(k => pm.expect([\"codigo\", \"mensaje\", \"requestId\", \"detalles\"]).to.include(k));",
+                  "  pm.expect(e.codigo).to.match(/^[A-Z_]+$/);",
+                  "  pm.expect(e.requestId).to.eql(pm.response.headers.get(\"X-Request-Id\"));",
+                  "});",
+                  "",
+                  "pm.test(\"400 SOLICITUD_INVALIDA\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Equipo-Consumidor",
+                "value": "{{equipoConsumidor}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/alertas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alertas"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"lecturas\": [",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "400: limit fuera de rango",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"X-Request-Id es un uuid\", () => {",
+                  "  pm.expect(pm.response.headers.get(\"X-Request-Id\")).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);",
+                  "});",
+                  "pm.test(\"Responde en menos de 2 s\", () => pm.expect(pm.response.responseTime).to.be.below(2000));",
+                  "",
+                  "const e = pm.response.json();",
+                  "pm.test(\"Esquema común Error\", () => {",
+                  "  [\"codigo\", \"mensaje\", \"requestId\"].forEach(k => pm.expect(e).to.have.property(k));",
+                  "  Object.keys(e).forEach(k => pm.expect([\"codigo\", \"mensaje\", \"requestId\", \"detalles\"]).to.include(k));",
+                  "  pm.expect(e.codigo).to.match(/^[A-Z_]+$/);",
+                  "  pm.expect(e.requestId).to.eql(pm.response.headers.get(\"X-Request-Id\"));",
+                  "});",
+                  "",
+                  "pm.test(\"400 en limit\", () => {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(e.detalles[0].campo).to.eql(\"limit\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Equipo-Consumidor",
+                "value": "{{equipoConsumidor}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/alertas/estado?limit=500",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alertas",
+                "estado"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "500"
+                }
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "400: X-Equipo-Consumidor inválido",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"X-Request-Id es un uuid\", () => {",
+                  "  pm.expect(pm.response.headers.get(\"X-Request-Id\")).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);",
+                  "});",
+                  "pm.test(\"Responde en menos de 2 s\", () => pm.expect(pm.response.responseTime).to.be.below(2000));",
+                  "",
+                  "const e = pm.response.json();",
+                  "pm.test(\"Esquema común Error\", () => {",
+                  "  [\"codigo\", \"mensaje\", \"requestId\"].forEach(k => pm.expect(e).to.have.property(k));",
+                  "  Object.keys(e).forEach(k => pm.expect([\"codigo\", \"mensaje\", \"requestId\", \"detalles\"]).to.include(k));",
+                  "  pm.expect(e.codigo).to.match(/^[A-Z_]+$/);",
+                  "  pm.expect(e.requestId).to.eql(pm.response.headers.get(\"X-Request-Id\"));",
+                  "});",
+                  "",
+                  "pm.test(\"400 en X-Equipo-Consumidor\", () => {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(e.detalles[0].campo).to.eql(\"X-Equipo-Consumidor\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Equipo-Consumidor",
+                "value": "equipo-9"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/alertas/estado",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alertas",
+                "estado"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "404: ruta inexistente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"X-Request-Id es un uuid\", () => {",
+                  "  pm.expect(pm.response.headers.get(\"X-Request-Id\")).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);",
+                  "});",
+                  "pm.test(\"Responde en menos de 2 s\", () => pm.expect(pm.response.responseTime).to.be.below(2000));",
+                  "",
+                  "const e = pm.response.json();",
+                  "pm.test(\"Esquema común Error\", () => {",
+                  "  [\"codigo\", \"mensaje\", \"requestId\"].forEach(k => pm.expect(e).to.have.property(k));",
+                  "  Object.keys(e).forEach(k => pm.expect([\"codigo\", \"mensaje\", \"requestId\", \"detalles\"]).to.include(k));",
+                  "  pm.expect(e.codigo).to.match(/^[A-Z_]+$/);",
+                  "  pm.expect(e.requestId).to.eql(pm.response.headers.get(\"X-Request-Id\"));",
+                  "});",
+                  "",
+                  "pm.test(\"404 NO_ENCONTRADO\", () => {",
+                  "  pm.response.to.have.status(404);",
+                  "  pm.expect(e.codigo).to.eql(\"NO_ENCONTRADO\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/no-existe",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "no-existe"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "equipoConsumidor",
+      "value": "equipo-6"
+    }
+  ]
+}
