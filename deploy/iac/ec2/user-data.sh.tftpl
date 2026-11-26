@@ -1,0 +1,53 @@
+#!/bin/bash
+# Arranque de la instancia: swap, Docker, clonar el repo y levantar el compose.
+# Registro en /var/log/voltrix-user-data.log. Es idempotente.
+set -euxo pipefail
+exec > >(tee -a /var/log/voltrix-user-data.log) 2>&1
+
+# 1. Swap de 1 GiB (la instancia tiene 1 GiB de RAM).
+if ! swapon --show=NAME --noheadings | grep -q '^/swapfile$'; then
+  fallocate -l 1G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+echo 'vm.swappiness=10' > /etc/sysctl.d/90-voltrix.conf
+sysctl --system
+
+# 2. Docker, Compose v2 y buildx desde los repositorios de Ubuntu.
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y
+apt-get install -y --no-install-recommends docker.io docker-compose-v2 docker-buildx git ca-certificates openssl
+systemctl enable --now docker
+usermod -aG docker ubuntu
+
+# 3. Código del servicio.
+DIR=/opt/voltrix-alertas
+if [ -d "$DIR/.git" ]; then
+  git -C "$DIR" fetch --depth 1 origin '${repo_ref}'
+  git -C "$DIR" checkout -f FETCH_HEAD
+else
+  git clone --depth 1 --branch '${repo_ref}' '${repo_url}' "$DIR"
+fi
+cd "$DIR"
+
+# 4. Variables de entorno: clave de PostgreSQL aleatoria, generada en la instancia.
+if [ ! -f .env ]; then
+  cp .env.example .env
+  sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(openssl rand -hex 16)|" .env
+  sed -i "s|^TELEMETRIA_URL=.*|TELEMETRIA_URL=${telemetria_url}|" .env
+  chmod 600 .env
+fi
+
+# 5. Levantar API + PostgreSQL.
+docker compose --env-file .env -f deploy/compose/docker-compose.yml up -d --build
+
+# 6. Esperar a /health.
+for i in $(seq 1 60); do
+  if curl -fsS http://127.0.0.1:8080/health; then echo; echo "voltrix-alertas listo"; exit 0; fi
+  sleep 5
+done
+echo "voltrix-alertas no respondió /health a tiempo" >&2
+docker compose --env-file .env -f deploy/compose/docker-compose.yml ps
+exit 1
