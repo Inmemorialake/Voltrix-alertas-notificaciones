@@ -1,0 +1,978 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Voltrix Energy · Alertas y Notificaciones",
+    "version": "1.0.0",
+    "description": "Contrato HTTP del servicio **Alertas y Notificaciones** (Equipo 3).\n\nEvalúa las lecturas de telemetría contra umbrales operativos y registra, sin duplicados ni\npérdidas, las alertas de condiciones críticas o urgentes: sobrecalentamiento de bancos de\nbaterías, caída de generación de paneles solares y viento fuera del rango operativo de las\nturbinas.\n\n**Técnica de concurrencia exigida:** control explícito de concurrencia sobre recursos\ncompartidos. Los workers que evalúan un lote comparten el contador de violaciones por activo y\nel registro de alertas activas (protegidos con locks por franja) y una cola thread-safe de\nnotificaciones. Entre réplicas, un índice único parcial en la base de datos y\n`INSERT ... ON CONFLICT` evitan alertas duplicadas.\n\n**Servicios que consume:**\n- **Equipo 2 – Telemetría de Plantas:** `GET /telemetria/{plantaId}` con filtros `desde`,\n  `hasta` y `tipoActivo`, paginando con `X-Next-Offset`. Las lecturas no incluyen el tipo de\n  activo, así que se consultan por `tipoActivo` (o se toma del segmento del ID: `PS`, `TB`, `BB`).\n\n**Consumidores previstos**\n\n| Equipo | Servicio | Operaciones que usa |\n|---|---|---|\n| 6 | Mantenimiento Predictivo | `GET /alertas/estado` (usa `resumenPorActivo` para `alertasActivas` y `alertasCriticas`) |\n\n**Convenciones comunes a todos los equipos**\n\n- Fechas en RFC 3339 **con zona horaria** (`2026-11-19T14:00:00Z`).\n- Identificadores de plantas y activos según Inventario (Equipo 1): `PL-001`, `PL-001-PS-07`.\n- Cada consumidor envía `X-Equipo-Consumidor: equipo-<N>`; toda respuesta incluye `X-Request-Id`.\n  Ambos se escriben en los logs como evidencia de consumo real.\n- Errores con el esquema común `Error` (`codigo`, `mensaje`, `requestId`, `detalles`).\n- `429` con `Retry-After` ante sobrecarga, `503` si la base de datos no responde y `502` si un\n  servicio de otro equipo del que se depende falla.\n- `GET /health` y `GET /openapi.yaml` existen en todos los servicios.\n- Las operaciones de procesamiento intensivo aceptan `modo` (`secuencial` | `paralelo`) y\n  `workers`, y devuelven `MetricasProcesamiento` para comparar ambas versiones.\n",
+    "contact": {
+      "name": "Equipo 3 · Alertas y Notificaciones (Contacto - Andrés Gerardo González Rosero)"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://{host}:{puerto}",
+      "description": "Despliegue del Componente B (EC2) o entorno local. La dirección vigente está en la hoja Coordinacion_Voltrix.",
+      "variables": {
+        "host": {
+          "default": "localhost",
+          "description": "IP pública o DNS de la instancia EC2."
+        },
+        "puerto": {
+          "default": "8080"
+        }
+      }
+    }
+  ],
+  "tags": [
+    {
+      "name": "Alertas",
+      "description": "Consulta del estado vigente de las alertas por planta y activo."
+    },
+    {
+      "name": "Procesamiento",
+      "description": "Operación intensiva con la técnica de paralelismo o concurrencia exigida al equipo (control explícito de concurrencia sobre recursos compartidos)."
+    },
+    {
+      "name": "Operación",
+      "description": "Salud del servicio y publicación del contrato."
+    }
+  ],
+  "paths": {
+    "/alertas": {
+      "post": {
+        "tags": [
+          "Procesamiento"
+        ],
+        "operationId": "evaluarLoteAlertas",
+        "summary": "Evaluar un lote de lecturas y registrar las alertas resultantes",
+        "description": "Recibe las lecturas de una de dos formas (exactamente una):\n\n- `lecturas`: el lote viene en el cuerpo (pruebas y benchmark).\n- `plantaId` con `desde` y `hasta`: el servicio consulta Telemetría de Plantas (Equipo 2).\n\nEl lote se reparte entre `workers` que evalúan umbrales en paralelo. Una alerta se crea\ncuando un activo acumula `lecturasMinimas` lecturas en violación dentro del lote. Si ya\nexiste una alerta `activa` para el mismo (`activoId`, `metrica`, `severidad`), se actualiza\n(`ocurrencias`, `ultimaDeteccion`) en lugar de duplicarse.\n\nCon `modo=secuencial` se ejecuta la línea base de un solo hilo; con `modo=paralelo`, la\nversión con control de concurrencia.\n",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EquipoConsumidor"
+          },
+          {
+            "$ref": "#/components/parameters/Modo"
+          },
+          {
+            "$ref": "#/components/parameters/Workers"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SolicitudEvaluacion"
+              },
+              "examples": {
+                "loteEnCuerpo": {
+                  "summary": "Lote enviado en el cuerpo",
+                  "value": {
+                    "lecturas": [
+                      {
+                        "plantaId": "PL-002",
+                        "activoId": "PL-002-BB-01",
+                        "tipoActivo": "banco_baterias",
+                        "fechaHora": "2026-11-25T13:05:00Z",
+                        "metrica": "temperatura",
+                        "valor": 46.3,
+                        "unidad": "C"
+                      },
+                      {
+                        "plantaId": "PL-041",
+                        "activoId": "PL-041-TB-03",
+                        "tipoActivo": "turbina",
+                        "fechaHora": "2026-11-25T13:05:00Z",
+                        "metrica": "velocidad_viento",
+                        "valor": 27.1,
+                        "unidad": "m/s"
+                      }
+                    ]
+                  }
+                },
+                "desdeTelemetria": {
+                  "summary": "Traer las lecturas de una planta desde Telemetría",
+                  "value": {
+                    "plantaId": "PL-002",
+                    "desde": "2026-11-25T12:00:00Z",
+                    "hasta": "2026-11-25T13:00:00Z"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Lote evaluado.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoEvaluacion"
+                },
+                "example": {
+                  "loteId": "6b1e2c3d-4f5a-4b7c-8d9e-0a1b2c3d4e5f",
+                  "lecturasEvaluadas": 2,
+                  "alertasNuevas": 1,
+                  "alertasActualizadas": 0,
+                  "duplicadasEvitadas": 0,
+                  "alertas": [
+                    {
+                      "id": "ALR-20261125-001",
+                      "plantaId": "PL-002",
+                      "activoId": "PL-002-BB-01",
+                      "tipoActivo": "banco_baterias",
+                      "metrica": "temperatura",
+                      "valorObservado": 46.3,
+                      "umbralAplicado": 45,
+                      "severidad": "critica",
+                      "estado": "activa",
+                      "ocurrencias": 3,
+                      "primeraDeteccion": "2026-11-25T13:05:00Z",
+                      "ultimaDeteccion": "2026-11-25T13:05:20Z"
+                    }
+                  ],
+                  "metricas": {
+                    "modo": "paralelo",
+                    "workers": 4,
+                    "elementos": 2,
+                    "duracionMs": 13
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SolicitudInvalida"
+          },
+          "429": {
+            "$ref": "#/components/responses/Sobrecarga"
+          },
+          "502": {
+            "$ref": "#/components/responses/DependenciaFallida"
+          },
+          "503": {
+            "$ref": "#/components/responses/NoDisponible"
+          }
+        }
+      }
+    },
+    "/alertas/estado": {
+      "get": {
+        "tags": [
+          "Alertas"
+        ],
+        "operationId": "consultarEstadoAlertas",
+        "summary": "Consultar el estado vigente de las alertas",
+        "description": "Devuelve una página de alertas (por defecto solo las `activa`) con totales por severidad\ny un resumen por activo. Mantenimiento Predictivo (Equipo 6) toma de `resumenPorActivo`\nlos conteos `activas` y `criticas` de cada activo.\n",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EquipoConsumidor"
+          },
+          {
+            "name": "plantaId",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar alertas de una microplanta.",
+            "schema": {
+              "$ref": "#/components/schemas/Identificador"
+            },
+            "example": "PL-002"
+          },
+          {
+            "name": "activoId",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar alertas de un activo.",
+            "schema": {
+              "$ref": "#/components/schemas/Identificador"
+            },
+            "example": "PL-002-BB-01"
+          },
+          {
+            "name": "severidad",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/Severidad"
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "description": "Estado de las alertas a devolver.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "activa",
+                "resuelta",
+                "todas"
+              ],
+              "default": "activa"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado de las alertas.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstadoAlertas"
+                },
+                "example": {
+                  "generadoEn": "2026-11-25T13:06:00Z",
+                  "totalActivas": 2,
+                  "porSeveridad": {
+                    "advertencia": 1,
+                    "critica": 1
+                  },
+                  "resumenPorActivo": [
+                    {
+                      "plantaId": "PL-002",
+                      "activoId": "PL-002-BB-01",
+                      "activas": 1,
+                      "criticas": 1
+                    },
+                    {
+                      "plantaId": "PL-001",
+                      "activoId": "PL-001-PS-07",
+                      "activas": 1,
+                      "criticas": 0
+                    }
+                  ],
+                  "datos": [
+                    {
+                      "id": "ALR-20261125-001",
+                      "plantaId": "PL-002",
+                      "activoId": "PL-002-BB-01",
+                      "tipoActivo": "banco_baterias",
+                      "metrica": "temperatura",
+                      "valorObservado": 46.3,
+                      "umbralAplicado": 45,
+                      "severidad": "critica",
+                      "estado": "activa",
+                      "ocurrencias": 3,
+                      "primeraDeteccion": "2026-11-25T13:05:00Z",
+                      "ultimaDeteccion": "2026-11-25T13:05:20Z"
+                    },
+                    {
+                      "id": "ALR-20261125-002",
+                      "plantaId": "PL-001",
+                      "activoId": "PL-001-PS-07",
+                      "tipoActivo": "panel_solar",
+                      "metrica": "caida_potencia",
+                      "valorObservado": 27.5,
+                      "umbralAplicado": 20,
+                      "severidad": "advertencia",
+                      "estado": "activa",
+                      "ocurrencias": 1,
+                      "primeraDeteccion": "2026-11-25T13:05:10Z",
+                      "ultimaDeteccion": "2026-11-25T13:05:10Z"
+                    }
+                  ],
+                  "total": 2,
+                  "limit": 50,
+                  "offset": 0
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SolicitudInvalida"
+          },
+          "429": {
+            "$ref": "#/components/responses/Sobrecarga"
+          },
+          "503": {
+            "$ref": "#/components/responses/NoDisponible"
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "Operación"
+        ],
+        "operationId": "consultarSalud",
+        "summary": "Comprobar la disponibilidad del servicio y de su base de datos",
+        "description": "No exige `X-Equipo-Consumidor`. Debe responder rápido y sin llamar a otros equipos de forma bloqueante.",
+        "responses": {
+          "200": {
+            "description": "Servicio disponible.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Salud"
+                },
+                "example": {
+                  "estado": "disponible",
+                  "baseDatos": "ok",
+                  "version": "1.0.0",
+                  "tiempoActivoSeg": 3600
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "El servicio no puede acceder a su base de datos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Salud"
+                },
+                "example": {
+                  "estado": "no_disponible",
+                  "baseDatos": "error",
+                  "version": "1.0.0",
+                  "tiempoActivoSeg": 3600
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.yaml": {
+      "get": {
+        "tags": [
+          "Operación"
+        ],
+        "operationId": "obtenerContrato",
+        "summary": "Descargar este contrato",
+        "description": "URL que se registra en la columna \"URL del contrato OpenAPI\" de la hoja Coordinacion_Voltrix.",
+        "responses": {
+          "200": {
+            "description": "Contrato en formato YAML.",
+            "content": {
+              "application/yaml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "EquipoConsumidor": {
+        "name": "X-Equipo-Consumidor",
+        "in": "header",
+        "required": false,
+        "description": "Equipo que hace la llamada. Se registra en los logs como evidencia de consumo entre células.",
+        "schema": {
+          "type": "string",
+          "pattern": "^equipo-[1-7]$",
+          "example": "equipo-6"
+        }
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "description": "Tamaño de página.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 50
+        }
+      },
+      "Offset": {
+        "name": "offset",
+        "in": "query",
+        "required": false,
+        "description": "Número de elementos a omitir.",
+        "schema": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        }
+      },
+      "Modo": {
+        "name": "modo",
+        "in": "query",
+        "required": false,
+        "description": "Versión del procesamiento a ejecutar (línea base o técnica paralela/concurrente).",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "secuencial",
+            "paralelo"
+          ],
+          "default": "paralelo"
+        }
+      },
+      "Workers": {
+        "name": "workers",
+        "in": "query",
+        "required": false,
+        "description": "Número de hilos, goroutines, procesos o workers a usar en modo paralelo. Por defecto lo decide el servicio.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        }
+      }
+    },
+    "headers": {
+      "X-Request-Id": {
+        "description": "Identificador de la petición, presente también en los logs del servicio.",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "Retry-After": {
+        "description": "Segundos que el consumidor debe esperar antes de reintentar.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "example": 1
+        }
+      }
+    },
+    "responses": {
+      "SolicitudInvalida": {
+        "description": "La solicitud no cumple el contrato.",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/X-Request-Id"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "codigo": "SOLICITUD_INVALIDA",
+              "mensaje": "La solicitud no cumple el contrato.",
+              "requestId": "0a4e9c1d-3f2b-4e8a-b7c6-5d1e2f3a4b5c",
+              "detalles": [
+                {
+                  "campo": "lecturas",
+                  "problema": "envíe 'lecturas' o 'plantaId', no ambos"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "Sobrecarga": {
+        "description": "Capacidad de admisión agotada. Reintentar después de `Retry-After` segundos.",
+        "headers": {
+          "Retry-After": {
+            "$ref": "#/components/headers/Retry-After"
+          },
+          "X-Request-Id": {
+            "$ref": "#/components/headers/X-Request-Id"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "codigo": "SOBRECARGA",
+              "mensaje": "La cola de evaluación está llena.",
+              "requestId": "2e7a4c9b-6d1f-4b8e-a3c5-7f0d2b9e4a1c"
+            }
+          }
+        }
+      },
+      "NoDisponible": {
+        "description": "Base de datos o servicio no disponible.",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/X-Request-Id"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "codigo": "NO_DISPONIBLE",
+              "mensaje": "No hay conexión con la base de datos.",
+              "requestId": "8f1b3d5a-2c7e-4f9a-b6d0-1e4c7a9b2d5f"
+            }
+          }
+        }
+      },
+      "DependenciaFallida": {
+        "description": "Un servicio de otro equipo del que se depende no respondió o respondió con error.",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/X-Request-Id"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "codigo": "DEPENDENCIA_FALLIDA",
+              "mensaje": "Telemetría de Plantas respondió 503.",
+              "requestId": "3c6e9f2a-8b1d-4e7c-a5f0-6d2b9e1c4a7f",
+              "detalles": [
+                {
+                  "campo": "equipo-2",
+                  "problema": "GET /telemetria/PL-002 respondió 503"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "examples": {
+      "AlertaEjemplo": {
+        "summary": "Alerta crítica por sobrecalentamiento de un banco de baterías",
+        "value": {
+          "id": "ALR-20261125-001",
+          "plantaId": "PL-002",
+          "activoId": "PL-002-BB-01",
+          "tipoActivo": "banco_baterias",
+          "metrica": "temperatura",
+          "valorObservado": 46.3,
+          "umbralAplicado": 45,
+          "severidad": "critica",
+          "estado": "activa",
+          "ocurrencias": 3,
+          "primeraDeteccion": "2026-11-25T13:05:00Z",
+          "ultimaDeteccion": "2026-11-25T13:05:20Z"
+        }
+      }
+    },
+    "schemas": {
+      "Identificador": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[A-Za-z0-9_-]+$",
+        "example": "PL-001-PS-07"
+      },
+      "Error": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "codigo",
+          "mensaje",
+          "requestId"
+        ],
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "pattern": "^[A-Z_]+$",
+            "description": "Código estable en MAYÚSCULAS. Comunes: SOLICITUD_INVALIDA, NO_ENCONTRADO, DUPLICADO,\nSOBRECARGA, NO_DISPONIBLE, DEPENDENCIA_FALLIDA, ERROR_INTERNO.\n",
+            "example": "SOLICITUD_INVALIDA"
+          },
+          "mensaje": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "detalles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "campo",
+                "problema"
+              ],
+              "properties": {
+                "campo": {
+                  "type": "string"
+                },
+                "problema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Salud": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "estado",
+          "baseDatos"
+        ],
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "disponible",
+              "no_disponible"
+            ]
+          },
+          "baseDatos": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error"
+            ]
+          },
+          "version": {
+            "type": "string"
+          },
+          "tiempoActivoSeg": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "MetricasProcesamiento": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "modo",
+          "workers",
+          "elementos",
+          "duracionMs"
+        ],
+        "description": "Evidencia de cada ejecución intensiva, útil para el benchmark secuencial contra paralelo.",
+        "properties": {
+          "modo": {
+            "type": "string",
+            "enum": [
+              "secuencial",
+              "paralelo"
+            ]
+          },
+          "workers": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "elementos": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Cantidad de lecturas evaluadas en el lote."
+          },
+          "duracionMs": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "TipoActivo": {
+        "type": "string",
+        "enum": [
+          "panel_solar",
+          "turbina",
+          "banco_baterias"
+        ],
+        "description": "Categoría del activo, con los mismos valores que usa Telemetría de Plantas (Equipo 2)."
+      },
+      "Severidad": {
+        "type": "string",
+        "enum": [
+          "advertencia",
+          "critica"
+        ],
+        "description": "`critica` exige atención inmediata; `advertencia`, seguimiento."
+      },
+      "EstadoAlerta": {
+        "type": "string",
+        "enum": [
+          "activa",
+          "resuelta"
+        ]
+      },
+      "LecturaEntrada": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "plantaId",
+          "activoId",
+          "fechaHora",
+          "metrica",
+          "valor",
+          "unidad"
+        ],
+        "description": "Lectura con la forma de `LecturaTelemetria` del Equipo 2, más `tipoActivo` opcional.\nSi falta `tipoActivo`, se deduce del segmento del ID (`PS` panel_solar, `TB` turbina,\n`BB` banco_baterias). Métricas evaluadas: `temperatura` (banco_baterias),\n`potencia` (panel_solar, para calcular la caída) y `velocidad_viento` (turbina).\n",
+        "properties": {
+          "plantaId": {
+            "$ref": "#/components/schemas/Identificador"
+          },
+          "activoId": {
+            "$ref": "#/components/schemas/Identificador"
+          },
+          "tipoActivo": {
+            "$ref": "#/components/schemas/TipoActivo"
+          },
+          "fechaHora": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "metrica": {
+            "type": "string"
+          },
+          "valor": {
+            "type": "number",
+            "format": "double"
+          },
+          "unidad": {
+            "type": "string"
+          }
+        }
+      },
+      "SolicitudEvaluacion": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Enviar `lecturas` o `plantaId` con `desde` y `hasta`, no ambos.",
+        "properties": {
+          "lecturas": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 5000,
+            "items": {
+              "$ref": "#/components/schemas/LecturaEntrada"
+            }
+          },
+          "plantaId": {
+            "$ref": "#/components/schemas/Identificador"
+          },
+          "desde": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Inicio de la ventana (RFC 3339 con zona horaria), incluido."
+          },
+          "hasta": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Fin de la ventana (RFC 3339 con zona horaria), excluido. Debe ser posterior a `desde`."
+          }
+        }
+      },
+      "Alerta": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "plantaId",
+          "activoId",
+          "tipoActivo",
+          "metrica",
+          "severidad",
+          "estado",
+          "ocurrencias",
+          "primeraDeteccion",
+          "ultimaDeteccion"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Identificador"
+          },
+          "plantaId": {
+            "$ref": "#/components/schemas/Identificador"
+          },
+          "activoId": {
+            "$ref": "#/components/schemas/Identificador"
+          },
+          "tipoActivo": {
+            "$ref": "#/components/schemas/TipoActivo"
+          },
+          "metrica": {
+            "type": "string",
+            "description": "temperatura | caida_potencia | velocidad_viento"
+          },
+          "valorObservado": {
+            "type": "number"
+          },
+          "umbralAplicado": {
+            "type": "number"
+          },
+          "severidad": {
+            "$ref": "#/components/schemas/Severidad"
+          },
+          "estado": {
+            "$ref": "#/components/schemas/EstadoAlerta"
+          },
+          "ocurrencias": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Veces que se ha detectado la condición mientras la alerta sigue activa."
+          },
+          "primeraDeteccion": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ultimaDeteccion": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ResumenActivo": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "plantaId",
+          "activoId",
+          "activas",
+          "criticas"
+        ],
+        "properties": {
+          "plantaId": {
+            "$ref": "#/components/schemas/Identificador"
+          },
+          "activoId": {
+            "$ref": "#/components/schemas/Identificador"
+          },
+          "activas": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Alertas activas del activo."
+          },
+          "criticas": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Alertas activas del activo con severidad `critica`."
+          }
+        }
+      },
+      "EstadoAlertas": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "generadoEn",
+          "totalActivas",
+          "porSeveridad",
+          "resumenPorActivo",
+          "datos",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "generadoEn": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "totalActivas": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Alertas activas que cumplen los filtros de planta y activo."
+          },
+          "porSeveridad": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "advertencia",
+              "critica"
+            ],
+            "properties": {
+              "advertencia": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "critica": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "resumenPorActivo": {
+            "type": "array",
+            "description": "Conteo de alertas activas por activo (todos los activos que cumplen los filtros, sin paginar).",
+            "items": {
+              "$ref": "#/components/schemas/ResumenActivo"
+            }
+          },
+          "datos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Alerta"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Número total de alertas que cumplen los filtros."
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          }
+        }
+      },
+      "ResultadoEvaluacion": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "loteId",
+          "lecturasEvaluadas",
+          "alertasNuevas",
+          "alertasActualizadas",
+          "duplicadasEvitadas",
+          "alertas",
+          "metricas"
+        ],
+        "properties": {
+          "loteId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "lecturasEvaluadas": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "alertasNuevas": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "alertasActualizadas": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "duplicadasEvitadas": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Detecciones que habrían creado una alerta repetida y se fusionaron con la existente."
+          },
+          "alertas": {
+            "type": "array",
+            "description": "Alertas creadas o actualizadas en este lote.",
+            "items": {
+              "$ref": "#/components/schemas/Alerta"
+            }
+          },
+          "metricas": {
+            "$ref": "#/components/schemas/MetricasProcesamiento"
+          }
+        }
+      }
+    }
+  }
+}

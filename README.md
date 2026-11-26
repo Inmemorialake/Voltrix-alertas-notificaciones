@@ -22,17 +22,20 @@ flowchart LR
 
 ## API
 
-Contrato completo: [`openapi.yaml`](openapi.yaml) (OpenAPI 3.0.3).
+Documentación navegable (Redoc): <https://inmemorialake.github.io/voltrix-alertas-notificaciones/>
+
+Contrato completo: [`openapi.yaml`](openapi.yaml) (OpenAPI 3.0.3, también en [`openapi.json`](openapi.json)). Sigue la plantilla común de Voltrix Energy (Equipo 1) registrada en la hoja Coordinacion_Voltrix.
 
 | Método y ruta | Descripción |
 | --- | --- |
-| `POST /alertas` | Evalúa un lote de lecturas y registra o actualiza alertas. Admite `?modo=secuencial\|concurrente&workers=N` para el benchmark. |
-| `GET /alertas/estado` | Alertas vigentes con totales por severidad y por planta. |
-| `GET /health` | Estado del servicio, la base de datos y la conexión con Telemetría. |
+| `POST /alertas` | Evalúa un lote de lecturas y registra o actualiza alertas. Admite `?modo=secuencial\|paralelo&workers=N` para el benchmark. |
+| `GET /alertas/estado` | Alertas vigentes con totales por severidad y resumen por activo (lo consume el Equipo 6). |
+| `GET /health` | Estado del servicio y de su base de datos. |
+| `GET /openapi.yaml` | Este contrato. |
 
 ## Documentación
 
-- Diseño de la solución: [`docs/diseno.md`](docs/diseno.md) (también en [Word](docs/diseno.docx)).
+- Diseño de la solución: [`docs/diseno.md`](docs/diseno.md).
 
 ## Stack
 
@@ -42,10 +45,12 @@ Python 3.12 · FastAPI · Uvicorn · `concurrent.futures` / `threading` · Postg
 
 ```text
 .
+├── index.html          # Página Redoc (GitHub Pages)
 ├── openapi.yaml        # Contrato de la API
+├── openapi.json        # Mismo contrato en JSON
 ├── docs/               # Diseño y evidencia
 ├── app/                # Código del servicio (Avance 1)
-├── bench/              # Benchmark secuencial vs concurrente (Avance 2)
+├── bench/              # Benchmark secuencial vs paralelo (Avance 2)
 ├── deploy/
 │   ├── compose/        # docker-compose para EC2
 │   ├── k8s/            # Manifiestos para Floci EKS
@@ -53,9 +58,13 @@ Python 3.12 · FastAPI · Uvicorn · `concurrent.futures` / `threading` · Postg
 └── README.md
 ```
 
+## Publicar la documentación
+
+En GitHub: *Settings → Pages → Build and deployment → Deploy from a branch*, rama `main`, carpeta `/ (root)`. La página queda en `https://<usuario>.github.io/voltrix-alertas-notificaciones/` y lee `openapi.yaml` del mismo repo.
+
 ## Cómo ejecutar
 
-Pendiente para el Avance 1 (esqueleto con docker-compose y datos de ejemplo según el contrato).
+Pendiente para el Avance 1 (esqueleto con docker-compose y datos de ejemplo según el contrato). La API escucha en el puerto común `8080`.
 
 ## Cronograma
 
@@ -63,15 +72,15 @@ Pendiente para el Avance 1 (esqueleto con docker-compose y datos de ejemplo seg�
 | --- | --- | --- |
 | 19 nov 2026 | Diseño y contrato OpenAPI | Entregado |
 | 26 nov 2026 | Avance 1: esqueleto en EC2 y clúster en Floci EKS | Pendiente |
-| 3 dic 2026 | Avance 2: versiones secuencial y concurrente, benchmark, 2 réplicas, consumo real | Pendiente |
+| 3 dic 2026 | Avance 2: versiones secuencial y paralela, benchmark, 2 réplicas, consumo real | Pendiente |
 | 10 dic 2026 | Entrega final y sustentación | Pendiente |
 
 ## Equipo 3
 
 | Integrante | Código | Correo | GitHub |
 | --- | --- | --- | --- |
-| Andrés Gerardo González Rosero | 202416541 | andresgerardogonzales@gmail.com | [@Inmemorialake](https://github.com/Inmemorialake) |
-| Freddy Alexander Melo Buitrago | 202125498 | freddy.melo@correounivalle.edu.co | [@Alexander-Motion](https://github.com/Alexander-Motion) |
-| Sarahy Gisselle Caicedo Betancourth | 202610315 | sarahy.caicedo@correounivalle.edu.co | [@Gimmsy](https://github.com/Gimmsy) |
+| Andrés Gerardo González Rosero | 202416541 | andres.gerardo.gonzalez@correounivalle.edu.co | [@Inmemorialake](https://github.com/Inmemorialake) |
 | Juan David Guar | 202341909 | juan.guar@correounivalle.edu.co | [@juan-guar](https://github.com/juan-guar) |
+| Sarahy Gisselle Caicedo Betancourth | 202610315 | sarahy.caicedo@correounivalle.edu.co | [@Gimmsy](https://github.com/Gimmsy) |
 | Verónica Andreina Granados López | 202123263 | veronica.granados@correounivalle.edu.co | [@DarkXPrincess](https://github.com/DarkXPrincess) |
+| Freddy Alexander Melo Buitrago | 202125498 | freddy.melo@correounivalle.edu.co | [@FoxArtMotion](https://github.com/FoxArtMotion) |
